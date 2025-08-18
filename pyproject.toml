@@ -153,6 +153,8 @@ name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
+# [tool.uv.extra-build-dependencies]
+# transformer-engine-jax = ["pybind11"]
 
 [project.optional-dependencies]
 
@@ -164,11 +166,12 @@ gcp = [
     "google-cloud-compute",
 ]
 
-cuda12 = ["jax[cuda12]==0.6.2", "torch"]
+cuda12 = ["jax[cuda12]==0.6.2", "torch>=2.7.0"]
+# cuda12 = ["jax[cuda12]>=0.6.2", "torch>=2.7.0", "transformer_engine[jax]>=1.0.0"]
 
-tpu = ["jax[tpu]==0.6.2", "torch"]
+tpu = ["jax[tpu]==0.6.2", "torch>=2.7.0"]
 
-cpu = ["jax==0.6.2", "torch"]
+cpu = ["jax==0.6.2", "torch>=2.7.0"]
 
 crawl = [
     "w3lib",
