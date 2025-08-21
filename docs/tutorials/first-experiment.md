@@ -171,7 +171,7 @@ We do this by calling `executor_main` from `marin.execution.executor`.
 We put this in a `if __name__ == "__main__":`:
 
 ```python
-from marin.execution.executor import executor_main
+from thalas.execution.executor import executor_main
 
 if __name__ == "__main__":
     executor_main(

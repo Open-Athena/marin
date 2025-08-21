@@ -1,5 +1,5 @@
 from experiments.dclm.tokenize_dclm import dclm_components_llama3
-from marin.execution.executor import executor_main
+from thalas.execution.executor import executor_main
 from marin.scaling_laws.create_ladder_suite import scaling_law_suite
 
 TAG = ["1330_scaling_code"]

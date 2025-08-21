@@ -10,7 +10,7 @@ from levanter.trainer import TrainerConfig
 
 from experiments.defaults import default_tokenize
 from marin.classifiers.utils import DatasetConfig
-from marin.execution.executor import (
+from thalas.execution.executor import (
     ExecutorMainConfig,
     ExecutorStep,
     executor_main,

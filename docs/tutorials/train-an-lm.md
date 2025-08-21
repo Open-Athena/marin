@@ -26,7 +26,7 @@ from experiments.defaults import SimpleTrainConfig, default_train
 from levanter.models.llama import LlamaConfig
 
 # Import the executor framework for running experiments
-from marin.execution.executor import executor_main
+from thalas.execution.executor import executor_main
 
 # Import logging utilities
 import logging

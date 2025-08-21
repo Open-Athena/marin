@@ -42,7 +42,7 @@ import os
 from dataclasses import dataclass
 import fsspec
 
-from marin.execution.executor import (
+from thalas.execution.executor import (
     ExecutorStep,
     executor_main,
     output_path_of,

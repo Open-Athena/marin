@@ -1,4 +1,4 @@
-from marin.execution.executor import executor_main
+from thalas.execution.executor import executor_main
 from marin.export.hf_upload import upload_dir_to_hf
 
 medu_exported = upload_dir_to_hf(
