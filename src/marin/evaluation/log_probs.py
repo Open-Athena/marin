@@ -18,7 +18,7 @@ from levanter.trainer import TrainerConfig
 
 from marin.evaluation.utils import download_from_gcs, is_remote_path
 from thalas.execution.executor import ExecutorStep, InputName, this_output_path
-from marin.utilities.executor_utils import ckpt_path_to_step_name
+from thalas.utilities.executor_utils import ckpt_path_to_step_name
 
 
 @dataclass
