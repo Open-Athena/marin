@@ -11,7 +11,7 @@ from marin.execution.executor import ExecutorStep, executor_main
 
 logger = logging.getLogger("ray")
 
-checkpoint_path = "hf://plantcad/_dev_marin_plantcad1_v1_lr_tune/local_store/checkpoints/plantcad-lr-tune-lr3e-05-r07-9aaef2/hf/step-668"
+checkpoint_path = "hf://plantcad/_dev_marin_plantcad1_v1_lr_tune/local_store/checkpoints/plantcad-lr-tune-lr1e-04-r07-5e25ff/hf/step-668"
 batch_size = 32
 max_samples = None
 

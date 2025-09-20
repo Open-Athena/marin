@@ -4,9 +4,10 @@ PlantCAD learning rate tuning experiment
 """
 
 import logging
+import ray
 
 from experiments.defaults import default_train
-from experiments.plantcad.utils import get_plantcad_config, get_plantcad_training_dataset, PLANTCAD_TAGS_LR_TUNE
+from experiments.plantcad.utils import get_available_gpus, get_plantcad_config, get_plantcad_training_dataset, PLANTCAD_TAGS_LR_TUNE
 from experiments.simple_train_config import SimpleTrainConfig
 from marin.execution.executor import executor_main
 from marin.resources import GpuConfig
@@ -14,10 +15,10 @@ from marin.resources import GpuConfig
 logger = logging.getLogger("ray")
 
 # Run iteration 
-run_number = 7
+run_number = 8
 
 # Resources
-num_gpus = 8
+num_gpus = get_available_gpus(local_only=True)
 target_tokens = 5_485_282
 
 # Learning rates to test
@@ -54,6 +55,7 @@ for lr in learning_rates:
         tags=PLANTCAD_TAGS_LR_TUNE,
         eval_harness_tasks=[],
         use_default_validation=False,
+        shuffle=False,
     )
     
     training_steps.append(training_step)

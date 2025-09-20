@@ -25,6 +25,8 @@ from datasets import load_dataset
 import numpy as np
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
+from marin.experiments.plantcad.utils import get_available_gpus
+
 logger = logging.getLogger("ray")
 
 
@@ -93,7 +95,7 @@ def _resolve_checkpoint(config: DnaEvalConfig) -> str:
 
     return final_path
 
-@ray.remote(max_calls=1, num_gpus=2) # TODO: wrap num_gpus in another function
+@ray.remote(max_calls=1, num_gpus=get_available_gpus())
 def run_conservation_eval(config: DnaEvalConfig) -> None:
     """Run DNA model evaluation on evolutionary conservation prediction task.
     
@@ -121,7 +123,7 @@ def run_conservation_eval(config: DnaEvalConfig) -> None:
         split=config.dataset_split,
     )
 
-    if len(dataset) > config.max_samples:
+    if config.max_samples is not None and len(dataset) > config.max_samples:
         logger.info(f"Downsampling dataset to {config.max_samples} samples")
         dataset = dataset.shuffle(seed=config.random_seed)
         dataset = dataset.select(range(config.max_samples))

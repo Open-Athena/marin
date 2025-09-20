@@ -247,6 +247,7 @@ def default_train(
     use_default_validation: bool = True,
     eval_harness_tasks: Sequence[EvalTaskConfig] = CORE_TASKS,
     override_output_path: str | None = None,
+    shuffle: bool | int = True,
 ) -> ExecutorStep:
     """
     Train a language model using the default configuration.
@@ -259,9 +260,10 @@ def default_train(
         tags: Any additional tags to add to the Wandb tracker.
         use_default_validation: Whether to use the default validation sets (currently Paloma).
         eval_harness_tasks: List of evaluation harness tasks. Defaults to the CORE set of tasks. Use () or [] to disable
+        shuffle: Whether to shuffle the training data. True=full shuffle, False=no shuffle, int=era shuffle with that length.
     """
 
-    pretraining_data = _prepare_data_config(tokenized, use_default_validation)
+    pretraining_data = _prepare_data_config(tokenized, use_default_validation, shuffle=shuffle)
 
     vocab_size = _get_vocab_size(pretraining_data)
 
@@ -573,6 +575,7 @@ def _get_vocab_size(pretraining_data):
 def _prepare_data_config(
     tokenized: InputName | ExecutorStep | LMMixtureDatasetConfig,
     use_default_validation: bool,
+    shuffle: bool | int = True,
 ) -> LMMixtureDatasetConfig:
     """
     Prepare a tokenized dataset for training. This is mostly just combining the tokenized data with the validation sets.
@@ -589,7 +592,7 @@ def _prepare_data_config(
         validation_sets = {}
 
     if isinstance(tokenized, InputName | ExecutorStep):
-        pretraining_data = lm_data_config(training_set=tokenized, validation_sets=validation_sets)
+        pretraining_data = lm_data_config(training_set=tokenized, validation_sets=validation_sets, shuffle=shuffle)
     else:
         # TODO: would be better to expose hooks in levanter instead of relying on mixtures
         pretraining_data = tokenized

@@ -2,6 +2,8 @@
 Utility functions for PlantCAD experiments.
 """
 
+import ray
+import jax
 from typing import Literal
 from experiments.defaults import default_tokenize
 from levanter.data.text import TextLmDatasetFormat
@@ -125,3 +127,17 @@ def get_plantcad_training_dataset(use_pretokenized: bool = True):
     else:
         # Return the standard tokenization step
         return tokenize_step
+
+
+def get_available_gpus(local_only: bool = False) -> int:
+    if local_only:
+        gpu_devices = jax.devices("gpu")
+        if not gpu_devices:
+            raise ValueError("No GPU devices found on this system")
+        return len(gpu_devices)
+    else:
+        cluster_resources = ray.cluster_resources()
+        gpu_count = cluster_resources.get("GPU")
+        if gpu_count is None:
+            raise ValueError("No GPUs found in the Ray cluster")
+        return int(gpu_count)

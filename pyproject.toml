@@ -279,7 +279,7 @@ pm = [
 ]
 
 dna = [
-    "biofoundation@git+https://github.com/Open-Athena/biofoundation@dbaaa5c3f431f590ec65a2e27f234a894b31d1ae",
+    "biofoundation@git+https://github.com/Open-Athena/biofoundation@23f6745defdd54cac09b43c066f249789bf74d56",
 ]
 
 [tool.black]
