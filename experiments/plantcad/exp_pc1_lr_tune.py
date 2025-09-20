@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
 """
 PlantCAD learning rate tuning experiment
-
-References:
-- experiments/exp474_config_sweep.py (learning rate sweeping)
-- experiments/plantcad/exp_pc1_batch_tune.py (structure template)
 """
 
 import logging
-import math
 
 from experiments.defaults import default_train
 from experiments.plantcad.utils import get_plantcad_config, get_plantcad_training_dataset, PLANTCAD_TAGS_LR_TUNE
@@ -17,8 +12,6 @@ from marin.execution.executor import executor_main
 from marin.resources import GpuConfig
 
 logger = logging.getLogger("ray")
-
-
 
 # Run iteration 
 run_number = 7
@@ -80,9 +73,3 @@ if __name__ == "__main__":
             *training_steps,
         ]
     )
-
-# Output of count_dataset.py:
-# Number of examples: 5,485,282
-# Tokens per example: 512
-# Total tokens: 2,808,464,384
-# Total tokens (billions): 2.81B

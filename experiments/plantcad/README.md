@@ -43,7 +43,7 @@ EOF
 uv pip install "skypilot[lambda]==0.10.3"
 sky check lambda
 sky launch \
-  --cluster marin --num-nodes 1 --gpus "H100:2" --disk-size 100 \
+  --cluster marin --num-nodes 1 --gpus "A10:1" --disk-size 100 \
   --env HUGGING_FACE_HUB_TOKEN --env WANDB_API_KEY \
   output/cluster.sky.yaml --retry-until-up --yes
 rsync -rPz ./ marin:/home/ubuntu/sky_workdir --exclude '.venv' --exclude '.git' --exclude src/marin/markdown
@@ -80,6 +80,8 @@ python -m experiments.plantcad.exp_pc1_batch_tune --prefix local_store --force_r
 
 python -m experiments.plantcad.exp_pc1_lr_tune --prefix local_store --force_run_failed true
 find local_store | grep -E 'step-668$' | xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v1_lr_tune {} {} --repo-type model"
+
+python -m experiments.plantcad.exp_pc1_eval --prefix local_store --force_run_failed true
 ```
 
 ## EDA 
@@ -119,7 +121,23 @@ This means 2,808,464,384 / 20 ==> ~140.4M params is Chinchilla optimal for text.
 ## TODO
 
 - Look for prefetch config
-- Check tokenization for actg rather than ACTG
+- Debug: "Your setup doesn't support bf16/gpu." in eval with `bf16_full_eval`
+
+```
+# cat /tmp/ray/session_2025-09-20_04-11-22_232072_15326/runtime_resources/pip/f20b7e798eeb2fc9320b1a708aaeee4e0130ee14/virtualenv/lib/python3.11/site-packages/transformers/training_args.py | grep -i "doesn't support" -C 100
+if self.bf16 or self.bf16_full_eval:
+    if self.use_cpu and not is_torch_available() and not is_torch_xla_available():
+        # cpu
+        raise ValueError("Your setup doesn't support bf16/(cpu, tpu, neuroncore). You need torch>=1.10")
+    elif not self.use_cpu:
+        if not is_torch_bf16_gpu_available() and not is_torch_xla_available():  # added for tpu support
+            error_message = "Your setup doesn't support bf16/gpu."
+            if is_torch_cuda_available():
+                error_message += " You need Ampere+ GPU with cuda>=11.0"
+            # gpu
+            raise ValueError(error_message)
+```
+
 - Discuss: `levanter.data.loader - loader.py:258 - INFO :: Prefetch wasn't fast enough: 33.836.`
 - Discuss this:
 

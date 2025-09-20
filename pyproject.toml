@@ -278,6 +278,9 @@ pm = [
   "PyGithub>=2.3.0"
 ]
 
+dna = [
+    "biofoundation@git+https://github.com/Open-Athena/biofoundation@dbaaa5c3f431f590ec65a2e27f234a894b31d1ae",
+]
 
 [tool.black]
 line-length = 121

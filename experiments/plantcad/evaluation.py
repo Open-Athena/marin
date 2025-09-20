@@ -14,222 +14,154 @@ The evaluation:
 import json
 import os
 from dataclasses import dataclass
-from typing import List
-
+import logging
 import numpy as np
 import ray
-from datasets import Dataset, load_dataset
-
-from levanter.models.lm_model import LmConfig
+from datasets import load_dataset
+from huggingface_hub import HfApi
+import fsspec
 from marin.execution.executor import InputName, this_output_path, versioned
+from datasets import load_dataset
+import numpy as np
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
-# Constants
-MIDDLE_POSITION = 255  # Middle position in 512bp sequences
-DEFAULT_BATCH_SIZE = 32
+logger = logging.getLogger("ray")
 
 
-# TODO: Which fields should be versioned?
 @dataclass
 class DnaEvalConfig:
     """Configuration for DNA model evolutionary conservation evaluation"""
     
     checkpoint_path: str | InputName
-    """Path to the model checkpoint"""
+    """Path to the model checkpoint directory"""
     
-    model_config: LmConfig
-    """Model configuration"""
+    dataset_path: str = "plantcad/evolutionary-constraint-example"
+    """Dataset repository path"""
+
+    dataset_config: str | None = "10k"
+    """Dataset configuration"""
+
+    dataset_split: str = "validation"
+    """Dataset split"""
+
+    batch_size: int = 32
+    """Batch size to use for inference"""
+
+    num_workers: int = 4
+    """Number of workers to use for data transformation and loading"""
     
-    eval_dataset_repo: str = "kuleshov-group/cross-species-single-nucleotide-annotation"
-    """Dataset repository ID"""
-    
-    eval_data_file: str = "Evolutionary_constraint/valid.tsv"
-    """Specific data file to evaluate on"""
-    
-    max_samples: int = 1000
+    max_samples: int | None = None
     """Maximum number of samples to evaluate (for quick testing)"""
     
     random_seed: int = versioned(42)
     """Random seed for data shuffling prior to downsampling"""
     
-    revision: str = versioned("0.5")
+    revision: str = versioned("0.1")
     """Revision number to force re-runs when needed"""
     
     output_path: str = this_output_path()
     """Output path for results"""
 
 
-def _load_and_prepare_dataset(config: DnaEvalConfig) -> Dataset:
-    """Load and prepare the evaluation dataset."""
-    print("Loading evaluation dataset...")
-    dataset = load_dataset(
-        config.eval_dataset_repo,
-        data_files={"valid": config.eval_data_file}
+def _resolve_checkpoint(config: DnaEvalConfig) -> str:
+    # Download HF checkpoint if it's a remote path
+    protocol = fsspec.utils.get_protocol(str(config.checkpoint_path))
+    if protocol != "hf":
+        return str(config.checkpoint_path)
+
+    # Remove protocol prefix to get path
+    path = str(config.checkpoint_path).removeprefix("hf://")
+    # Parse org/repo/path/to/folder format
+    path_parts = path.split("/")
+    if len(path_parts) >= 2:
+        repo_id = "/".join(path_parts[:2])  # org/repo
+        folder_path = "/".join(path_parts[2:]) if len(path_parts) > 2 else ""
+    else:
+        repo_id = path
+        folder_path = ""
+    
+    # Download to HF cache
+    api = HfApi()
+    local_path = api.snapshot_download(
+        repo_id=repo_id,
+        allow_patterns=f"{folder_path}/*" if folder_path else "*",
     )
     
-    eval_data = dataset["valid"]
-    if len(eval_data) > config.max_samples:
-        # Shuffle dataset before downsampling to ensure representative sample
-        eval_data = eval_data.shuffle(seed=config.random_seed)
-        eval_data = eval_data.select(range(config.max_samples))
-    
-    print(f"Evaluating on {len(eval_data)} samples")
-    return eval_data
+    # Update config to point to local path
+    final_path = os.path.join(local_path, folder_path) if folder_path else local_path
+    logger.info(f"Downloaded HF checkpoint to: {final_path}")
 
+    return final_path
 
-def _extract_nucleotide_probabilities(
-    model, 
-    tokenizer, 
-    sequences: List[str], 
-    device: str,
-    batch_size: int = DEFAULT_BATCH_SIZE
-) -> np.ndarray:
+@ray.remote(max_calls=1, num_gpus=2) # TODO: wrap num_gpus in another function
+def run_conservation_eval(config: DnaEvalConfig) -> None:
+    """Run DNA model evaluation on evolutionary conservation prediction task.
+    
+    See:
+    - https://github.com/Open-Athena/biofoundation/blob/main/examples/marin_evolutionary_constraint.py#L12
+    - https://github.com/Open-Athena/biofoundation/blob/e8ff2febc0f14a268b757ee35585ede5dbf8b4ae/biofoundation/model.py#L86
+    - https://openathena.slack.com/archives/C0884476QSC/p1758039985337099?thread_ts=1758038598.680879&cid=C0884476QSC
+    - https://github.com/Open-Athena/marin/blob/a22645a881b3ecf68def6fa219690b8e871a9f58/experiments/plantcad/evaluation.py
     """
-    Extract nucleotide probabilities at the middle position for each sequence.
-    
-    Args:
-        model: Loaded transformers model
-        tokenizer: Loaded tokenizer
-        sequences: List of DNA sequences
-        device: Device to run inference on
-        batch_size: Batch size for inference
-        
-    Returns:
-        Array of probabilities for true nucleotides at middle position
-    """
-    import torch
-    
-    nucleotide_probs = []
-    
-    with torch.no_grad():
-        for i in range(0, len(sequences), batch_size):
-            batch_sequences = sequences[i:i+batch_size]
-            
-            # Tokenize batch
-            inputs = tokenizer(
-                batch_sequences, 
-                return_tensors="pt", 
-                padding=True, 
-                truncation=True, 
-                max_length=512
-            )
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            
-            # Forward pass
-            outputs = model(**inputs)
-            logits = outputs.logits  # Shape: (batch_size, seq_len, vocab_size)
-            
-            # Process each sequence in batch
-            for j, seq in enumerate(batch_sequences):
-                # Extract logits at middle position
-                pos_logits = logits[j, MIDDLE_POSITION, :]
-                assert pos_logits.shape == (model.config.vocab_size,), \
-                    f"Expected shape ({model.config.vocab_size},), got {pos_logits.shape}"
-                
-                # Convert to probabilities
-                probs = torch.softmax(pos_logits, dim=0)
-                
-                # TODO: Skip examples where middle position is not in ACTG
-                # Get true nucleotide and its probability
-                true_nucleotide = seq[MIDDLE_POSITION]
-                token_id = tokenizer.convert_tokens_to_ids(true_nucleotide)
-                nucleotide_prob = probs[token_id].cpu().item()
-                
-                nucleotide_probs.append(nucleotide_prob)
-            
-            print(f"Processed {min(i + batch_size, len(sequences))}/{len(sequences)} sequences")
-    
-    return np.array(nucleotide_probs)
-
-
-# TODO: What is best practice for declaring deps that intersect with groups in pyproject.toml?
-@ray.remote(runtime_env={"pip": ["scikit-learn"]}, max_calls=1)
-def run_dna_evaluation(config: DnaEvalConfig) -> None:
-    """
-    Run DNA model evaluation on evolutionary conservation prediction task.
-    
-    This performs zero-shot evaluation by:
-    1. Loading evolutionary conservation sequences (512bp each)
-    2. Running model inference to get nucleotide probabilities at middle position  
-    3. Computing ROC AUC to measure evolutionary conservation discrimination
-    """
-    print("🧬 Starting DNA Conservation Model Evaluation")
-    print(f"Checkpoint: {config.checkpoint_path}")
-    print(f"Max samples: {config.max_samples}")
-    
-    # Load and prepare dataset
-    eval_data = _load_and_prepare_dataset(config)
-    
-    # Load model and tokenizer
-    print("Loading tokenizer...")
-    from transformers import AutoTokenizer
-    tokenizer = AutoTokenizer.from_pretrained(config.checkpoint_path)
-    
-    print("Loading model...")
-    from transformers import AutoModelForCausalLM
-    import torch
-    
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = AutoModelForCausalLM.from_pretrained(
-        config.checkpoint_path, 
-        torch_dtype=torch.float16
-    )
-    model = model.to(device)
-    model.eval()
-    print(f"Model loaded on {device}")
-    
-    # Extract nucleotide probabilities
-    print("Running inference...")
-    sequences = eval_data["sequences"]
-    labels = eval_data["label"]
-    
-    nucleotide_probs = _extract_nucleotide_probabilities(
-        model=model,
-        tokenizer=tokenizer, 
-        sequences=sequences,
-        device=device,
-        batch_size=DEFAULT_BATCH_SIZE
-    )
-    
-    # Validate results shape
-    assert nucleotide_probs.shape == (len(eval_data),), \
-        f"Expected shape ({len(eval_data)},), got {nucleotide_probs.shape}"
-    
-    # Compute ROC AUC
+    from biofoundation.model import HFCausalLM
+    from biofoundation.inference import run_reflogprob_clm
     from sklearn.metrics import roc_auc_score
-    roc_auc = roc_auc_score(labels, nucleotide_probs)
-    print(f"ROC AUC: {roc_auc:.4f}")
-    
-    # Save results
-    _save_results(config, eval_data, roc_auc, device)
-    print("🧬 DNA conservation evaluation completed!")
 
+    logger.info(f"Loading tokenizer and model from {config.checkpoint_path}")
+    checkpoint_path = _resolve_checkpoint(config)
+    logger.info(f"Resolved checkpoint path to: {checkpoint_path}")
+    tokenizer = AutoTokenizer.from_pretrained(checkpoint_path, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(checkpoint_path, trust_remote_code=True)
+    model = HFCausalLM(model)
 
-def _save_results(
-    config: DnaEvalConfig, 
-    eval_data: Dataset, 
-    roc_auc: float, 
-    device: str
-) -> None:
-    """Save evaluation results to JSON file."""
+    logger.info(f"Loading dataset from {config.dataset_path} (config={config.dataset_config}, split={config.dataset_split})")
+    dataset = load_dataset(
+        config.dataset_path,
+        config.dataset_config,
+        split=config.dataset_split,
+    )
+
+    if len(dataset) > config.max_samples:
+        logger.info(f"Downsampling dataset to {config.max_samples} samples")
+        dataset = dataset.shuffle(seed=config.random_seed)
+        dataset = dataset.select(range(config.max_samples))
+
+    label = np.array(dataset["label"])
+    if not np.in1d(label, [0, 1]).all():
+        raise ValueError(f"Label must be 0 or 1; got {label.unique()=}")
+
+    logger.info(f"Running inference on {len(dataset)} samples")
+    pred = run_reflogprob_clm(
+        model,
+        tokenizer,
+        dataset,
+        data_transform_kwargs=dict(
+            remove_columns=dataset.column_names,
+            num_proc=config.num_workers,
+        ),
+        inference_kwargs=dict(
+            per_device_eval_batch_size=config.batch_size,
+            torch_compile=False,
+            bf16_full_eval=True,
+            dataloader_num_workers=config.num_workers,
+            remove_unused_columns=False,
+        ),
+    )
+
+    n_positive = np.sum(label)
+    n_negative = len(label) - n_positive
+    balance = np.mean(label)
+    roc_auc = roc_auc_score(label, pred)
     results = {
-        "dataset_repo": config.eval_dataset_repo,
-        "dataset_file": config.eval_data_file,
-        "num_samples": len(eval_data),
-        "max_samples": config.max_samples,
-        "checkpoint_path": str(config.checkpoint_path),
+        "n_positive": int(n_positive),
+        "n_negative": int(n_negative),
+        "balance": float(balance),
         "roc_auc": float(roc_auc),
-        "metrics": {
-            "evolutionary_conservation_roc_auc": float(roc_auc)
-        },
-        "model_device": str(device),
-        "batch_size": DEFAULT_BATCH_SIZE,
-        "middle_position": MIDDLE_POSITION,
     }
-    
+    logger.info(f"Evaluation results: {results}")
     os.makedirs(config.output_path, exist_ok=True)
     results_file = os.path.join(config.output_path, "results.json")
-    
     with open(results_file, "w") as f:
         json.dump(results, f, indent=2)
     
-    print(f"Results saved to: {results_file}")
+    logger.info(f"Results saved to: {results_file}")

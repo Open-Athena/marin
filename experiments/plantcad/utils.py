@@ -62,7 +62,7 @@ def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m"] = "30m
 
 def create_dna_conservation_eval_step(
     checkpoint_step: ExecutorStep | InputName,
-    model_config: LmConfig,
+    max_steps: int = 99,
     max_samples: int = 1000,
     random_seed: int = 42,
 ) -> ExecutorStep:
@@ -85,12 +85,12 @@ def create_dna_conservation_eval_step(
         name=f"evaluation/dna-conservation/{checkpoint_step.name}",
         fn=run_dna_evaluation,
         config=DnaEvalConfig(
-            checkpoint_path=checkpoint_step / "hf/step-99",
-            model_config=model_config,
+            checkpoint_path=checkpoint_step / "hf" / f"step-{max_steps}",
             max_samples=max_samples,
             random_seed=random_seed,
         ),
-        pip_dependency_groups=["eval"],
+        # pip_dependency_groups=["eval"],
+        # pip_dependency_groups=["dna"],
         description="Zero-shot evolutionary conservation prediction evaluation for DNA model",
     )
 
