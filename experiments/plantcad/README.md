@@ -43,10 +43,23 @@ EOF
 uv pip install "skypilot[lambda]==0.10.3"
 sky check lambda
 sky launch \
-  --cluster marin --num-nodes 1 --gpus "A10:1" --disk-size 100 \
+  --cluster marin --infra lambda --num-nodes 1 --gpus "A100:8" --disk-size 100 \
   --env HUGGING_FACE_HUB_TOKEN --env WANDB_API_KEY \
   output/cluster.sky.yaml --retry-until-up --yes
 rsync -rPz ./ marin:/home/ubuntu/sky_workdir --exclude '.venv' --exclude '.git' --exclude src/marin/markdown
+```
+
+#### GCP
+
+```bash
+uv pip install "skypilot[gcp]==0.10.3"
+sky check gcp
+sky launch \
+  --cluster marin --infra gcp --num-nodes 1 --gpus "A100:1" --disk-size 100 \
+  --instance-type a2-highgpu-1g --region us-east-1 \
+  --env HUGGING_FACE_HUB_TOKEN --env WANDB_API_KEY \
+  output/cluster.sky.yaml
+rsync -rPz ./ marin:/home/gcpuser/sky_workdir --exclude '.venv' --exclude '.git' --exclude src/marin/markdown
 ```
 
 #### CoreWeave
@@ -59,7 +72,7 @@ sky launch \
   --cpus 124 --memory 2008 \
   --env HUGGING_FACE_HUB_TOKEN --env WANDB_API_KEY \
   output/cluster.sky.yaml
-rsync -rPz ./ marin:/home/sky/sky_workdir --exclude '.venv' --exclude '.git' --exclude src/marin/markdown
+rsync -rPz ./ marin:/home/sky/sky_workdir --exclude '.venv' --exclude '.git' --exclude src/marin/markdown --exclude '__pycache__'
 
 # For transformer-engine-jax:
 sudo apt update
@@ -81,7 +94,16 @@ python -m experiments.plantcad.exp_pc1_batch_tune --prefix local_store --force_r
 python -m experiments.plantcad.exp_pc1_lr_tune --prefix local_store --force_run_failed true
 find local_store | grep -E 'step-668$' | xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v1_lr_tune {} {} --repo-type model"
 
+mkdir -p logs
+screen -S train
+python -m experiments.plantcad.exp_pc1_train \
+  --prefix local_store --force_run_failed true 2>&1 | tee logs/exp_pc1_train.log
+# https://wandb.ai/eric-czech/marin/runs/plantcad-train-300m-r01-2aa671
+# 
+
 python -m experiments.plantcad.exp_pc1_eval --prefix local_store --force_run_failed true
+
+sky exec -c marin output/task.sky.yaml
 ```
 
 ## EDA 
@@ -156,4 +178,20 @@ if self.bf16 or self.bf16_full_eval:
 # (train_lm_task pid=31054) E0916 11:23:11.594812   31054 buffer_comparator.cc:150] Difference at 12327: 14.5, expected 16.25
 # (train_lm_task pid=31054) E0916 11:23:11.594815   31054 buffer_comparator.cc:150] Difference at 12336: 15.5625, expected 17.5
 # (train_lm_task pid=31054) 2025-09-16 11:23:11.594824: E external/xla/xla/service/gpu/autotuning/gemm_fusion_autotuner.cc:1070] Results do not match the reference. This is likely a bug/unexpected loss of precision.
+```
+
+- Discuss these  constant errors in deleting checkpoints:
+
+```
+train_lm_task pid=295292) 2025-09-26T19:19:35 - 0 - levanter.checkpoint - checkpoint.py:383 - INFO :: Saved checkpoint to local_store/checkpoints/plantcad-train-300m-r02-432442/checkpoints/step-20076 for step 20076
+(train_lm_task pid=295292) 2025-09-26T19:19:35 - 0 - levanter.checkpoint - checkpoint.py:230 - INFO :: Deleting old temporary checkpoint local_store/checkpoints/plantcad-train-300m-r02-432442/checkpoints/step-20061 after saving new checkpoint.
+(train_lm_task pid=295292) 2025-09-26T19:19:35 - 0 - levanter.checkpoint - checkpoint.py:262 - INFO :: Removing checkpoint local_store/checkpoints/plantcad-train-300m-r02-432442/checkpoints/step-20061
+(train_lm_task pid=295292) 2025-09-26T19:19:35 - 0 - levanter.checkpoint - checkpoint.py:270 - INFO :: Deleting old checkpoint local_store/checkpoints/plantcad-train-300m-r02-432442/checkpoints/step-20061 from /home/sky/sky_workdir/local_store/checkpoints/plantcad-train-300m-r02-432442/checkpoints/local_store/checkpoints/plantcad-train-300m-r02-432442/checkpoints/step-20061
+(train_lm_task pid=295292) 2025-09-26T19:19:35 - 0 - levanter.checkpoint - checkpoint.py:276 - ERROR :: Failed to delete checkpoint local_store/checkpoints/plantcad-train-300m-r02-432442/checkpoints/step-20061
+(train_lm_task pid=295292) Traceback (most recent call last):
+(train_lm_task pid=295292)   File "/tmp/ray/session_2025-09-26_10-17-29_045489_276828/runtime_resources/pip/96e8d2e31c1b75b4d19a0ea2c755a672438fdca3/virtualenv/lib/python3.11/site-packages/levanter/checkpoint.py", line 272, in _do_rm_checkpoint
+(train_lm_task pid=295292)     fs.rm(cp_path, recursive=True)
+(train_lm_task pid=295292)   File "/tmp/ray/session_2025-09-26_10-17-29_045489_276828/runtime_resources/pip/96e8d2e31c1b75b4d19a0ea2c755a672438fdca3/virtualenv/lib/python3.11/site-packages/fsspec/implementations/local.py", line 191, in rm
+(train_lm_task pid=295292)     os.remove(p)
+(train_lm_task pid=295292) FileNotFoundError: [Errno 2] No such file or directory: '/home/sky/sky_workdir/local_store/checkpoints/plantcad-train-300m-r02-432442/checkpoints/local_store/checkpoints/plantcad-train-300m-r02-432442/checkpoints/step-20061'
 ```

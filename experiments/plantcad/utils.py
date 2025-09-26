@@ -11,13 +11,21 @@ from levanter.models.lm_model import LmConfig
 from levanter.models.llama import LlamaConfig
 from marin.execution.executor import ExecutorStep, InputName
 
+# Constants for PlantCAD experiments
+PLANTCAD_TOKENIZER = "kuleshov-group/PlantCaduceus_l20"
+ANGIOSPERM_HF_ID = "kuleshov-group/Angiosperm_16_genomes"
+
+# Dataset statistics
+PLANTCAD_DATASET_EXAMPLES = 5_485_282
+PLANTCAD_DATASET_TOKENS = 2_808_464_384
+
 # Common tags for PlantCAD experiments
 PLANTCAD_TAGS_BASE = ["plant", "genomics"]
 PLANTCAD_TAGS_LR_TUNE = PLANTCAD_TAGS_BASE + ["lr-tune", "hyperparameter"]
 PLANTCAD_TAGS_BATCH_TUNE = PLANTCAD_TAGS_BASE + ["batch-tune", "memory-test"]
 
 
-def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m"] = "30m") -> LlamaConfig:
+def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m", "300m"] = "30m") -> LlamaConfig:
     if model_size == "nano":
         # Testing configuration - keep small for fast iteration
         return LlamaConfig(
@@ -58,8 +66,18 @@ def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m"] = "30m
             num_kv_heads=12,
             num_layers=12,
         )
+    elif model_size == "300m":
+        # Optimized 300M parameter configuration for genomic data
+        return LlamaConfig(
+            seq_len=512,
+            hidden_dim=1024,
+            intermediate_dim=3072,
+            num_heads=16,
+            num_kv_heads=16,
+            num_layers=22,
+        )
     else:
-        raise ValueError(f"Unknown model size: {model_size}. Choose from: 'nano', '10m', '30m', '100m'")
+        raise ValueError(f"Unknown model size: {model_size}. Choose from: 'nano', '10m', '30m', '100m', '300m'")
 
 
 def create_dna_conservation_eval_step(
@@ -98,15 +116,11 @@ def create_dna_conservation_eval_step(
 
 
 def get_plantcad_training_dataset(use_pretokenized: bool = True):
-    # PlantCaduceus tokenizer for genomic sequences
-    plantcad_tokenizer = "kuleshov-group/PlantCaduceus_l20"
-    angiosperm_hf_id = "kuleshov-group/Angiosperm_16_genomes"
-    
     # Create the base tokenization step
     tokenize_step = default_tokenize(
         name="angiosperm_16_genomes",  # path to store the tokenized data inside PREFIX
-        dataset=angiosperm_hf_id,  # HuggingFace dataset ID
-        tokenizer=plantcad_tokenizer,  # PlantCaduceus tokenizer for genomic sequences
+        dataset=ANGIOSPERM_HF_ID,  # HuggingFace dataset ID
+        tokenizer=PLANTCAD_TOKENIZER,  # PlantCaduceus tokenizer for genomic sequences
         format=TextLmDatasetFormat(text_key="seq"),  # CRITICAL: Use 'seq' field instead of default 'text'
     )
     

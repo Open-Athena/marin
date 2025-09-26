@@ -25,7 +25,7 @@ from datasets import load_dataset
 import numpy as np
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-from marin.experiments.plantcad.utils import get_available_gpus
+from experiments.plantcad.utils import get_available_gpus
 
 logger = logging.getLogger("ray")
 
@@ -95,7 +95,8 @@ def _resolve_checkpoint(config: DnaEvalConfig) -> str:
 
     return final_path
 
-@ray.remote(max_calls=1, num_gpus=get_available_gpus())
+# TODO: fix this GPU count
+@ray.remote(max_calls=1, num_gpus=get_available_gpus(local_only=True))
 def run_conservation_eval(config: DnaEvalConfig) -> None:
     """Run DNA model evaluation on evolutionary conservation prediction task.
     

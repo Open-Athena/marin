@@ -45,7 +45,9 @@ def find_config_for_target(target_params_millions: int, start_hidden_dim: int, s
     best_diff = float('inf')
     
     # Search around the starting point with increments of 128 for hidden_dim
-    for hidden_dim in range(start_hidden_dim + 256, max(128, start_hidden_dim - 256), -128):
+    # Reduce search range for very large models to avoid memory issues
+    search_range = 128 if target_params_millions >= 300 else 256
+    for hidden_dim in range(start_hidden_dim + search_range, max(128, start_hidden_dim - search_range), -128):
         # Calculate intermediate_dim as multiples of 128
         for int_multiplier in [3.0, 3.5, 4.0]:
             intermediate_dim = int(hidden_dim * int_multiplier)
@@ -124,6 +126,7 @@ if __name__ == "__main__":
     
     # Define targets with smart starting points based on previous results
     targets = [
+        (300, 896, 18),   # 300M: start around 896 hidden_dim, 18 layers (more conservative)
         (100, 768, 12),   # 100M: start around 768 hidden_dim, 12 layers
         (30, 512, 8),     # 30M: start around 512 hidden_dim, 8 layers  
         (10, 384, 6),     # 10M: start around 384 hidden_dim, 6 layers
@@ -135,7 +138,9 @@ if __name__ == "__main__":
         print(f"Finding configuration for {target_millions}M parameters...")
         print(f"Starting search from hidden_dim={start_hidden}, layers={start_layers}")
         
-        config, params = find_config_for_target(target_millions, start_hidden, start_layers)
+        # Use higher tolerance for larger models
+        tolerance = 20 if target_millions >= 300 else 3
+        config, params = find_config_for_target(target_millions, start_hidden, start_layers, tolerance)
         
         if config is not None:
             configs[f"{target_millions}m"] = config
@@ -164,6 +169,20 @@ if __name__ == "__main__":
 
 # Using genomic vocab size: 7
 # ============================================================
+# Finding configuration for 300M parameters...
+# Starting search from hidden_dim=896, layers=18
+
+# Target: 300M parameters
+# Actual: 299,953,152 (300.0M) parameters
+# Difference: 0.0M
+# Config:
+#   hidden_dim: 1024
+#   intermediate_dim: 3072
+#   num_layers: 22
+#   num_heads: 16
+#   num_kv_heads: 16
+#   seq_len: 512
+# ----------------------------------------
 # Finding configuration for 100M parameters...
 # Starting search from hidden_dim=768, layers=12
 
@@ -210,6 +229,16 @@ if __name__ == "__main__":
 # ============================================================
 # GENERATED CONFIGURATIONS FOR GENOMIC MODELS (EVEN NUMBERS)
 # ============================================================
+
+# llama_genomic_300m = LlamaConfig(
+#     seq_len=512,
+#     hidden_dim=1024,
+#     intermediate_dim=3072,
+#     num_heads=16,
+#     num_kv_heads=16,
+#     num_layers=22,
+# )
+# # Actual params: 299,953,152 (300.0M)
 
 # llama_genomic_100m = LlamaConfig(
 #     seq_len=512,

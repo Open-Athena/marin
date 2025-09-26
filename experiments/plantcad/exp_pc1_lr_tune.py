@@ -4,10 +4,9 @@ PlantCAD learning rate tuning experiment
 """
 
 import logging
-import ray
 
 from experiments.defaults import default_train
-from experiments.plantcad.utils import get_available_gpus, get_plantcad_config, get_plantcad_training_dataset, PLANTCAD_TAGS_LR_TUNE
+from experiments.plantcad.utils import get_available_gpus, get_plantcad_config, get_plantcad_training_dataset, PLANTCAD_TAGS_LR_TUNE, PLANTCAD_DATASET_EXAMPLES
 from experiments.simple_train_config import SimpleTrainConfig
 from marin.execution.executor import executor_main
 from marin.resources import GpuConfig
@@ -15,17 +14,22 @@ from marin.resources import GpuConfig
 logger = logging.getLogger("ray")
 
 # Run iteration 
-run_number = 8
+run_number = 9
 
 # Resources
 num_gpus = get_available_gpus(local_only=True)
-target_tokens = 5_485_282
+target_examples = PLANTCAD_DATASET_EXAMPLES
 
 # Learning rates to test
 learning_rates = [1e-5, 3e-5, 1e-4, 3e-4]
 
 # Fixed batch size
+# TODO: How do you tune micro/macro batch size instead of gloabl batch?
+#       This needs to not be a function of device count.
 batch_size = 1024 * num_gpus
+
+# Shuffle training data
+shuffle = False
 
 # Model configuration
 model_size = "30m"  # Use optimized 30M config as default
@@ -40,9 +44,10 @@ training_steps = []
 for lr in learning_rates:
     train_config = SimpleTrainConfig(
         resources=GpuConfig(gpu_count=num_gpus),
+        data_seed=42,
         train_batch_size=batch_size,
         steps_per_eval=50,
-        num_train_steps=int(target_tokens / batch_size),
+        num_train_steps=int(target_examples / batch_size),
         learning_rate=lr,
         steps_per_export=100,
     )
@@ -55,7 +60,7 @@ for lr in learning_rates:
         tags=PLANTCAD_TAGS_LR_TUNE,
         eval_harness_tasks=[],
         use_default_validation=False,
-        shuffle=False,
+        shuffle=shuffle,
     )
     
     training_steps.append(training_step)
@@ -66,6 +71,7 @@ if __name__ == "__main__":
     logger.info("=" * 60)
     logger.info(f"Model: {model_size} ({plant_model_config})")
     logger.info(f"Batch size: {batch_size}")
+    logger.info(f"Target examples: {target_examples:,}")
     logger.info(f"Learning rates to test: {learning_rates}")
     logger.info("=" * 60)
     
