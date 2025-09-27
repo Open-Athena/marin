@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2025 The Marin Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Model sizing utility for finding LlamaConfig models that hit specific parameter targets.
 
@@ -10,7 +24,6 @@ import jax.random as jrandom
 from haliax import Axis
 from levanter.models.llama import LlamaConfig, LlamaLMHeadModel
 from levanter.utils.jax_utils import parameter_count
-
 
 # PlantCaduceus tokenizer vocab size
 GENOMIC_VOCAB_SIZE = 7
@@ -24,26 +37,28 @@ def count_exact_parameters(config: LlamaConfig, vocab_size: int = GENOMIC_VOCAB_
     return parameter_count(model)
 
 
-def find_config_for_target(target_params_millions: int, start_hidden_dim: int, start_layers: int, tolerance_millions: int = 3) -> tuple[LlamaConfig, int]:
+def find_config_for_target(
+    target_params_millions: int, start_hidden_dim: int, start_layers: int, tolerance_millions: int = 3
+) -> tuple[LlamaConfig, int]:
     """
     Find a configuration close to the target parameter count.
-    
+
     Args:
         target_params_millions: Target parameter count in millions
         start_hidden_dim: Starting hidden dimension to search around
         start_layers: Starting number of layers to search around
         tolerance_millions: Acceptable deviation in millions of parameters
-    
+
     Returns:
         Tuple of (best_config, actual_param_count)
     """
     target_params = target_params_millions * 1_000_000
     tolerance = tolerance_millions * 1_000_000
-    
+
     best_config = None
-    best_params = float('inf')
-    best_diff = float('inf')
-    
+    best_params = float("inf")
+    best_diff = float("inf")
+
     # Search around the starting point with increments of 128 for hidden_dim
     # Reduce search range for very large models to avoid memory issues
     search_range = 128 if target_params_millions >= 300 else 256
@@ -53,7 +68,7 @@ def find_config_for_target(target_params_millions: int, start_hidden_dim: int, s
             intermediate_dim = int(hidden_dim * int_multiplier)
             # Round to nearest 128
             intermediate_dim = ((intermediate_dim + 63) // 128) * 128
-            
+
             # Ensure num_heads is even and divisible into hidden_dim
             if hidden_dim >= 512:
                 num_heads = hidden_dim // 64  # 64 dims per head
@@ -61,11 +76,11 @@ def find_config_for_target(target_params_millions: int, start_hidden_dim: int, s
                 num_heads = hidden_dim // 32  # 32 dims per head
             else:
                 num_heads = max(2, hidden_dim // 16)  # Minimum 2 heads
-                
+
             # Ensure num_heads is even
             if num_heads % 2 != 0:
                 num_heads += 1
-                
+
             # KV heads - ensure even and divisible
             for ratio in [1, 2, 4]:
                 if num_heads >= ratio and num_heads % ratio == 0:
@@ -74,13 +89,13 @@ def find_config_for_target(target_params_millions: int, start_hidden_dim: int, s
                         break
             else:
                 num_kv_heads = 2  # Even fallback
-            
+
             # Try layer counts around the starting point (only even)
             for layer_offset in [0, -2, 2, -4, 4]:
                 num_layers = start_layers + layer_offset
                 if num_layers < 2 or num_layers % 2 != 0:
                     continue
-                    
+
                 config = LlamaConfig(
                     seq_len=512,
                     hidden_dim=hidden_dim,
@@ -89,19 +104,19 @@ def find_config_for_target(target_params_millions: int, start_hidden_dim: int, s
                     num_kv_heads=num_kv_heads,
                     num_layers=num_layers,
                 )
-                
+
                 try:
                     actual_params = count_exact_parameters(config)
                     diff = abs(actual_params - target_params)
-                    
+
                     if diff < best_diff and diff <= tolerance:
                         best_config = config
                         best_params = actual_params
                         best_diff = diff
-                        
+
                 except Exception:
                     continue
-    
+
     return best_config, best_params
 
 
@@ -111,7 +126,7 @@ def print_config_summary(config: LlamaConfig, actual_params: int, target_million
     print(f"\nTarget: {target_millions}M parameters")
     print(f"Actual: {actual_params:,} ({actual_millions:.1f}M) parameters")
     print(f"Difference: {abs(actual_millions - target_millions):.1f}M")
-    print(f"Config:")
+    print("Config:")
     print(f"  hidden_dim: {config.hidden_dim}")
     print(f"  intermediate_dim: {config.intermediate_dim}")
     print(f"  num_layers: {config.num_layers}")
@@ -123,37 +138,37 @@ def print_config_summary(config: LlamaConfig, actual_params: int, target_million
 if __name__ == "__main__":
     print(f"Using genomic vocab size: {GENOMIC_VOCAB_SIZE}")
     print("=" * 60)
-    
+
     # Define targets with smart starting points based on previous results
     targets = [
-        (300, 896, 18),   # 300M: start around 896 hidden_dim, 18 layers (more conservative)
-        (100, 768, 12),   # 100M: start around 768 hidden_dim, 12 layers
-        (30, 512, 8),     # 30M: start around 512 hidden_dim, 8 layers  
-        (10, 384, 6),     # 10M: start around 384 hidden_dim, 6 layers
+        (300, 896, 18),  # 300M: start around 896 hidden_dim, 18 layers (more conservative)
+        (100, 768, 12),  # 100M: start around 768 hidden_dim, 12 layers
+        (30, 512, 8),  # 30M: start around 512 hidden_dim, 8 layers
+        (10, 384, 6),  # 10M: start around 384 hidden_dim, 6 layers
     ]
-    
+
     configs = {}
-    
+
     for target_millions, start_hidden, start_layers in targets:
         print(f"Finding configuration for {target_millions}M parameters...")
         print(f"Starting search from hidden_dim={start_hidden}, layers={start_layers}")
-        
+
         # Use higher tolerance for larger models
         tolerance = 20 if target_millions >= 300 else 3
         config, params = find_config_for_target(target_millions, start_hidden, start_layers, tolerance)
-        
+
         if config is not None:
             configs[f"{target_millions}m"] = config
             print_config_summary(config, params, target_millions)
         else:
             print(f"Could not find configuration within tolerance for {target_millions}M parameters")
         print("-" * 40)
-    
+
     # Generate the configurations as code
     print("\n" + "=" * 60)
     print("GENERATED CONFIGURATIONS FOR GENOMIC MODELS (EVEN NUMBERS)")
     print("=" * 60)
-    
+
     for name, config in configs.items():
         actual_params = count_exact_parameters(config)
         print(f"\nllama_genomic_{name} = LlamaConfig(")
@@ -163,7 +178,7 @@ if __name__ == "__main__":
         print(f"    num_heads={config.num_heads},")
         print(f"    num_kv_heads={config.num_kv_heads},")
         print(f"    num_layers={config.num_layers},")
-        print(f")")
+        print(")")
         print(f"# Actual params: {actual_params:,} ({actual_params/1e6:.1f}M)")
 
 

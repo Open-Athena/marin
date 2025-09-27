@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2025 The Marin Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 PlantCAD tutorial experiment
 
@@ -11,7 +25,11 @@ This experiment demonstrates:
 import logging
 
 from experiments.defaults import default_train
-from experiments.plantcad.utils import get_plantcad_config, create_dna_conservation_eval_step, get_plantcad_training_dataset
+from experiments.plantcad.utils import (
+    get_plantcad_config,
+    create_dna_conservation_eval_step,
+    get_plantcad_training_dataset,
+)
 from experiments.simple_train_config import SimpleTrainConfig
 from marin.execution.executor import executor_main
 from marin.resources import GpuConfig
@@ -32,8 +50,8 @@ plant_model_config = get_plantcad_config(model_size)  # Using "nano" for quick t
 nano_plant_train_config = SimpleTrainConfig(
     resources=GpuConfig(gpu_count=1),
     train_batch_size=16,  # Smaller batch size for genomic data
-    num_train_steps=100,   # Quick test - 100 steps
-    learning_rate=3e-4,    # Conservative learning rate for genomic data
+    num_train_steps=100,  # Quick test - 100 steps
+    learning_rate=3e-4,  # Conservative learning rate for genomic data
     weight_decay=0.1,
     steps_per_export=100,
 )
@@ -50,7 +68,7 @@ nano_angiosperm_model = default_train(
     use_default_validation=False,  # No default validation for genomic data
 )
 
-# Create DNA conservation evaluation step  
+# Create DNA conservation evaluation step
 dna_conservation_evaluation = create_dna_conservation_eval_step(
     checkpoint_step=nano_angiosperm_model,
     model_config=plant_model_config,
@@ -62,13 +80,13 @@ if __name__ == "__main__":
     # Quick data exploration first
     logger.info("🧬 PlantCAD Experiment: Angiosperm Genomic Data")
     logger.info("=" * 60)
-    logger.info(f"Dataset: kuleshov-group/Angiosperm_16_genomes")
-    logger.info(f"Tokenizer: kuleshov-group/PlantCaduceus_l20")
+    logger.info("Dataset: kuleshov-group/Angiosperm_16_genomes")
+    logger.info("Tokenizer: kuleshov-group/PlantCaduceus_l20")
     logger.info(f"Model: {plant_model_config}")
     logger.info(f"Training steps: {nano_plant_train_config.num_train_steps}")
     logger.info(f"Batch size: {nano_plant_train_config.train_batch_size}")
     logger.info("=" * 60)
-    
+
     executor_main(
         steps=[
             angiosperm_tokenized,

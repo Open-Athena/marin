@@ -260,7 +260,8 @@ def default_train(
         tags: Any additional tags to add to the Wandb tracker.
         use_default_validation: Whether to use the default validation sets (currently Paloma).
         eval_harness_tasks: List of evaluation harness tasks. Defaults to the CORE set of tasks. Use () or [] to disable
-        shuffle: Whether to shuffle the training data. True=full shuffle, False=no shuffle, int=era shuffle with that length.
+        shuffle: Whether to shuffle the training data. True=full shuffle, False=no shuffle,
+                 int=era shuffle with that length.
     """
 
     pretraining_data = _prepare_data_config(tokenized, use_default_validation, shuffle=shuffle)

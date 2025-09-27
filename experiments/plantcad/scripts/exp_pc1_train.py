@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2025 The Marin Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 PlantCAD training experiment - single 300M model with optimized learning rate
 """
@@ -6,19 +20,25 @@ PlantCAD training experiment - single 300M model with optimized learning rate
 import logging
 
 from experiments.defaults import default_train
-from experiments.plantcad.utils import get_available_gpus, get_plantcad_config, get_plantcad_training_dataset, PLANTCAD_TAGS_BASE, PLANTCAD_DATASET_EXAMPLES
+from experiments.plantcad.utils import (
+    get_available_gpus,
+    get_plantcad_config,
+    get_plantcad_training_dataset,
+    PLANTCAD_TAGS_BASE,
+    PLANTCAD_DATASET_EXAMPLES,
+)
 from experiments.simple_train_config import SimpleTrainConfig
 from marin.execution.executor import executor_main
 from marin.resources import GpuConfig
 
 logger = logging.getLogger("ray")
 
-# Run iteration 
+# Run iteration
 run_number = 2
 
 # Resources
 num_gpus = get_available_gpus(local_only=True)
-target_examples = PLANTCAD_DATASET_EXAMPLES * 10 # 10 epochs
+target_examples = PLANTCAD_DATASET_EXAMPLES * 10  # 10 epochs
 
 # Best learning rate from tuning experiments
 learning_rate = 1e-4
@@ -60,7 +80,7 @@ training_step = default_train(
     tokenized=plant_data_tokenized,
     model_config=plant_model_config,
     train_config=train_config,
-    tags=PLANTCAD_TAGS_BASE + ["training"],
+    tags=[*PLANTCAD_TAGS_BASE, "training"],
     eval_harness_tasks=[],
     use_default_validation=False,
     shuffle=shuffle,
@@ -78,7 +98,7 @@ if __name__ == "__main__":
     logger.info(f"Steps per export: {steps_per_export:,}")
     logger.info(f"Steps per eval: {steps_per_eval:,}")
     logger.info("=" * 60)
-    
+
     executor_main(
         steps=[
             plant_data_tokenized,

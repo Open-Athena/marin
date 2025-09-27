@@ -1,13 +1,30 @@
+# Copyright 2025 The Marin Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 Utility functions for PlantCAD experiments.
 """
 
 import ray
 import jax
+import re
+import os
+import fsspec
 from typing import Literal
+from transformers import AutoTokenizer
 from experiments.defaults import default_tokenize
 from levanter.data.text import TextLmDatasetFormat
-from levanter.models.lm_model import LmConfig
 from levanter.models.llama import LlamaConfig
 from marin.execution.executor import ExecutorStep, InputName
 
@@ -21,8 +38,30 @@ PLANTCAD_DATASET_TOKENS = 2_808_464_384
 
 # Common tags for PlantCAD experiments
 PLANTCAD_TAGS_BASE = ["plant", "genomics"]
-PLANTCAD_TAGS_LR_TUNE = PLANTCAD_TAGS_BASE + ["lr-tune", "hyperparameter"]
-PLANTCAD_TAGS_BATCH_TUNE = PLANTCAD_TAGS_BASE + ["batch-tune", "memory-test"]
+PLANTCAD_TAGS_LR_TUNE = [*PLANTCAD_TAGS_BASE, "lr-tune", "hyperparameter"]
+PLANTCAD_TAGS_BATCH_TUNE = [*PLANTCAD_TAGS_BASE, "batch-tune", "memory-test"]
+
+
+def get_plantcad_tokenizer():
+    """Get the PlantCAD tokenizer instance."""
+    return AutoTokenizer.from_pretrained(PLANTCAD_TOKENIZER, trust_remote_code=True)
+
+
+def get_nucleotide_token_ids(tokenizer: AutoTokenizer):
+    """Get the token IDs for nucleotides A, C, T, G."""
+    nucleotide_ids = {}
+    # Use lowercase as this is what the plantcad tokenizer normalizes to first
+    for nucleotide in ["a", "c", "t", "g"]:
+        token_id = tokenizer.convert_tokens_to_ids(nucleotide)
+        if token_id is None:
+            raise ValueError(f"Nucleotide '{nucleotide}' not found in PlantCAD tokenizer vocabulary")
+        nucleotide_ids[nucleotide] = token_id
+
+    # Assert that all token IDs are unique
+    token_id_values = list(nucleotide_ids.values())
+    assert len(token_id_values) == len(set(token_id_values)), f"Token IDs are not unique: {nucleotide_ids}"
+
+    return nucleotide_ids
 
 
 def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m", "300m"] = "30m") -> LlamaConfig:
@@ -88,19 +127,19 @@ def create_dna_conservation_eval_step(
 ) -> ExecutorStep:
     """
     Create an ExecutorStep for DNA model evaluation on evolutionary constraints.
-    
+
     Args:
         checkpoint_step: Training step that produced the model checkpoint
         model_config: Model configuration (currently unused but kept for compatibility)
             - TODO: Is this necessary if the HF checkpoint isn't for an arch in `transformers`?
         max_samples: Maximum number of evaluation samples
         random_seed: Random seed for data shuffling
-    
+
     Returns:
         ExecutorStep configured for DNA evolutionary constraint evaluation
     """
     from experiments.plantcad.evaluation import run_dna_evaluation, DnaEvalConfig
-    
+
     return ExecutorStep(
         name=f"evaluation/dna-conservation/{checkpoint_step.name}",
         fn=run_dna_evaluation,
@@ -123,11 +162,11 @@ def get_plantcad_training_dataset(use_pretokenized: bool = True):
         tokenizer=PLANTCAD_TOKENIZER,  # PlantCaduceus tokenizer for genomic sequences
         format=TextLmDatasetFormat(text_key="seq"),  # CRITICAL: Use 'seq' field instead of default 'text'
     )
-    
+
     if use_pretokenized:
         # Download pre-tokenized dataset to HF cache and use local path
         from huggingface_hub import snapshot_download
-        
+
         # Download the entire pre-tokenized dataset to HF cache
         # Based on HuggingFace Hub patterns for downloading datasets
         cached_path = snapshot_download(
@@ -135,12 +174,34 @@ def get_plantcad_training_dataset(use_pretokenized: bool = True):
             repo_type="dataset",
             revision="main",
         )
-        
+
         # Override the tokenize step output to point to the cached location
         return tokenize_step.with_output_path(cached_path)
     else:
         # Return the standard tokenization step
         return tokenize_step
+
+
+def get_checkpoints(checkpoint_dir: str) -> list[dict[str, str | int]]:
+    """Retrieve checkpoint information from a given directory.
+
+    Args:
+        checkpoint_dir: Local or remote directory path containing model checkpoints, e.g.
+            `<prefix>/checkpoints/model-train-432442/hf/step-<step_number>`.
+
+    Returns:
+        List of dictionaries containing checkpoint path and step number
+    """
+    fs, _ = fsspec.url_to_fs(checkpoint_dir)
+    paths = []
+    for checkpoint_path in fs.glob(os.path.join(checkpoint_dir, "step-*")):
+        checkpoint_path = fs.unstrip_protocol(checkpoint_path)
+        match = re.search(r"step-(\d+)$", checkpoint_path.split("/")[-1])
+        if not match:
+            raise ValueError(f"Failed to extract step number from checkpoint path: {checkpoint_path}")
+        step = int(match.group(1))
+        paths.append(dict(path=checkpoint_path, step=step))
+    return paths
 
 
 def get_available_gpus(local_only: bool = False) -> int:

@@ -1,4 +1,18 @@
 #!/usr/bin/env python3
+# Copyright 2025 The Marin Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 """
 PlantCAD learning rate tuning experiment
 """
@@ -6,14 +20,20 @@ PlantCAD learning rate tuning experiment
 import logging
 
 from experiments.defaults import default_train
-from experiments.plantcad.utils import get_available_gpus, get_plantcad_config, get_plantcad_training_dataset, PLANTCAD_TAGS_LR_TUNE, PLANTCAD_DATASET_EXAMPLES
+from experiments.plantcad.utils import (
+    get_available_gpus,
+    get_plantcad_config,
+    get_plantcad_training_dataset,
+    PLANTCAD_TAGS_LR_TUNE,
+    PLANTCAD_DATASET_EXAMPLES,
+)
 from experiments.simple_train_config import SimpleTrainConfig
 from marin.execution.executor import executor_main
 from marin.resources import GpuConfig
 
 logger = logging.getLogger("ray")
 
-# Run iteration 
+# Run iteration
 run_number = 9
 
 # Resources
@@ -51,7 +71,7 @@ for lr in learning_rates:
         learning_rate=lr,
         steps_per_export=100,
     )
-    
+
     training_step = default_train(
         name=f"plantcad-lr-tune-lr{lr:.0e}-r{run_number:02d}",
         tokenized=plant_data_tokenized,
@@ -62,7 +82,7 @@ for lr in learning_rates:
         use_default_validation=False,
         shuffle=shuffle,
     )
-    
+
     training_steps.append(training_step)
 
 
@@ -74,7 +94,7 @@ if __name__ == "__main__":
     logger.info(f"Target examples: {target_examples:,}")
     logger.info(f"Learning rates to test: {learning_rates}")
     logger.info("=" * 60)
-    
+
     executor_main(
         steps=[
             plant_data_tokenized,
