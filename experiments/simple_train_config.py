@@ -14,6 +14,7 @@
 
 import dataclasses
 from dataclasses import dataclass
+from typing import Any
 
 from levanter.callbacks.watch import WatchConfig
 from levanter.optim import OptimizerConfig
@@ -86,6 +87,9 @@ class SimpleTrainConfig:
 
     watch: WatchConfig = dataclasses.field(default_factory=WatchConfig)
     """Config for watching gradients, parameters, etc. Default is to log norms of gradients and parameters."""
+
+    eval_plugins: list[dict[str, Any]] | None = None
+    """List of evaluation plugin configs. Each should have 'plugin' (module.class) and 'config' keys."""
 
     @property
     def tpu_type(self) -> str | None:

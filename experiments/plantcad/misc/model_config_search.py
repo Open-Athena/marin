@@ -141,10 +141,14 @@ if __name__ == "__main__":
 
     # Define targets with smart starting points based on previous results
     targets = [
-        (300, 896, 18),  # 300M: start around 896 hidden_dim, 18 layers (more conservative)
-        (100, 768, 12),  # 100M: start around 768 hidden_dim, 12 layers
-        (30, 512, 8),  # 30M: start around 512 hidden_dim, 8 layers
-        (10, 384, 6),  # 10M: start around 384 hidden_dim, 6 layers
+        # Comment out existing searches to focus on new larger models
+        # (300, 896, 18),  # 300M: start around 896 hidden_dim, 18 layers (more conservative)
+        # (100, 768, 12),  # 100M: start around 768 hidden_dim, 12 layers
+        # (30, 512, 8),  # 30M: start around 512 hidden_dim, 8 layers
+        # (10, 384, 6),  # 10M: start around 384 hidden_dim, 6 layers
+        # New larger model targets
+        (1000, 1536, 24),  # 1B: start around 1536 hidden_dim, 24 layers
+        (600, 1280, 20),  # 600M: start around 1280 hidden_dim, 20 layers
     ]
 
     configs = {}
@@ -154,7 +158,14 @@ if __name__ == "__main__":
         print(f"Starting search from hidden_dim={start_hidden}, layers={start_layers}")
 
         # Use higher tolerance for larger models
-        tolerance = 20 if target_millions >= 300 else 3
+        if target_millions >= 1000:
+            tolerance = 50  # 1B+ models need more tolerance
+        elif target_millions >= 600:
+            tolerance = 30  # 600M+ models need higher tolerance
+        elif target_millions >= 300:
+            tolerance = 20  # 300M+ models need moderate tolerance
+        else:
+            tolerance = 3  # Smaller models can be more precise
         config, params = find_config_for_target(target_millions, start_hidden, start_layers, tolerance)
 
         if config is not None:
@@ -244,6 +255,26 @@ if __name__ == "__main__":
 # ============================================================
 # GENERATED CONFIGURATIONS FOR GENOMIC MODELS (EVEN NUMBERS)
 # ============================================================
+
+# llama_genomic_1000m = LlamaConfig(
+#     seq_len=512,
+#     hidden_dim=1664,
+#     intermediate_dim=4992,
+#     num_heads=26,
+#     num_kv_heads=26,
+#     num_layers=28,
+# )
+# # Actual params: 1,007,996,288 (1008.0M)
+
+# llama_genomic_600m = LlamaConfig(
+#     seq_len=512,
+#     hidden_dim=1408,
+#     intermediate_dim=4224,
+#     num_heads=22,
+#     num_kv_heads=22,
+#     num_layers=24,
+# )
+# # Actual params: 618,617,472 (618.6M)
 
 # llama_genomic_300m = LlamaConfig(
 #     seq_len=512,

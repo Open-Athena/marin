@@ -27,11 +27,10 @@ import logging
 from experiments.defaults import default_train
 from experiments.plantcad.utils import (
     get_plantcad_config,
-    create_dna_conservation_eval_step,
     get_plantcad_training_dataset,
 )
 from experiments.simple_train_config import SimpleTrainConfig
-from marin.execution.executor import executor_main
+from marin.execution.executor import executor_main, ExecutorStep, InputName
 from marin.resources import GpuConfig
 
 logger = logging.getLogger("ray")
@@ -67,6 +66,41 @@ nano_angiosperm_model = default_train(
     eval_harness_tasks=[],
     use_default_validation=False,  # No default validation for genomic data
 )
+
+
+def create_dna_conservation_eval_step(
+    checkpoint_step: ExecutorStep | InputName,
+    max_steps: int = 99,
+    max_samples: int = 1000,
+    random_seed: int = 42,
+) -> ExecutorStep:
+    """
+    Create an ExecutorStep for DNA model evaluation on evolutionary constraints.
+
+    Args:
+        checkpoint_step: Training step that produced the model checkpoint
+        model_config: Model configuration (currently unused but kept for compatibility)
+            - TODO: Is this necessary if the HF checkpoint isn't for an arch in `transformers`?
+        max_samples: Maximum number of evaluation samples
+        random_seed: Random seed for data shuffling
+
+    Returns:
+        ExecutorStep configured for DNA evolutionary constraint evaluation
+    """
+    from experiments.plantcad.evaluation import run_dna_evaluation, DnaEvalConfig
+
+    return ExecutorStep(
+        name=f"evaluation/dna-conservation/{checkpoint_step.name}",
+        fn=run_dna_evaluation,
+        config=DnaEvalConfig(
+            checkpoint_path=checkpoint_step / "hf" / f"step-{max_steps}",
+            max_samples=max_samples,
+            random_seed=random_seed,
+        ),
+        pip_dependency_groups=["dna"],
+        description="Zero-shot evolutionary conservation prediction evaluation for DNA model",
+    )
+
 
 # Create DNA conservation evaluation step
 dna_conservation_evaluation = create_dna_conservation_eval_step(

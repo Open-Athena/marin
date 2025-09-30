@@ -40,10 +40,10 @@ EOF
 #### Lambda
 
 ```bash
-uv pip install "skypilot[lambda]==0.10.3"
+uv pip install "skypilot[lambda]==0.10.3.post1"
 sky check lambda
 sky launch \
-  --cluster marin --infra lambda --num-nodes 1 --gpus "A10:1" --disk-size 100 \
+  --cluster marin --infra lambda --num-nodes 1 --gpus "A100:8" --disk-size 100 \
   --env HUGGING_FACE_HUB_TOKEN --env WANDB_API_KEY \
   output/cluster.sky.yaml --retry-until-up --yes
 REMOTE_USER=ubuntu
@@ -52,7 +52,7 @@ REMOTE_USER=ubuntu
 #### GCP
 
 ```bash
-uv pip install "skypilot[gcp]==0.10.3"
+uv pip install "skypilot[gcp]==0.10.3.post1"
 sky check gcp
 sky launch \
   --cluster marin --infra gcp --num-nodes 1 --gpus "A100:1" --disk-size 100 \
@@ -65,8 +65,16 @@ REMOTE_USER=gcpuser
 #### CoreWeave
 
 ```bash
-uv pip install "skypilot[kubernetes]==0.10.3"
+# The default timeout for pod launch is too conservative in SkyPilot and needs to be increased:
+mkdir -p ~/.sky; cat > ~/.sky/config.yaml << EOF
+kubernetes:
+  provision_timeout: 180 # Wait 3 minutes for provisioning before timeout
+  autoscaler: coreweave
+EOF
+
+uv pip install "skypilot[kubernetes]==0.10.3.post1"
 sky check k8s
+sky show-gpus --infra k8s
 sky launch \
   --cluster marin --num-nodes 1 --infra k8s --gpus "H100_NVLINK_80GB:8" \
   --cpus 124 --memory 2008 \
@@ -79,6 +87,10 @@ sudo apt update
 sudo apt install build-essential g++ cmake ninja-build
 # uv sync --extra cuda12
 # hint: This error likely indicates that you need to install a library that provides "cuda_runtime_api.h" for `transformer-engine-jax@2.6.0.post1`
+
+# For a manual debugging pod:
+kubectl get nodes -o wide # get name "gd92c2c"
+kubectl debug node/gd92c2c -i -t --image=ubuntu
 ```
 
 ## Execution
@@ -97,16 +109,18 @@ rsync -rPz ./ marin:/home/$REMOTE_USER/sky_workdir \
 python -m experiments.plantcad.scripts.exp_pc1_tutorial --prefix local_store --force_run_failed true
 python -m experiments.plantcad.scripts.exp_pc1_batch_tune --prefix local_store --force_run_failed true
 python -m experiments.plantcad.scripts.exp_pc1_lr_tune --prefix local_store --force_run_failed true
-find local_store | grep -E 'step-668$' | xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v1_lr_tune {} {} --repo-type model"
 
 # Training
+sudo apt-get install screen -y; screen -S train
 mkdir -p logs
-screen -S train
 python -m experiments.plantcad.scripts.exp_pc1_train \
   --prefix local_store --force_run_failed true 2>&1 | tee logs/exp_pc1_train.log
 
 # Evaluation
 rm -rf local_store/evaluation/dna-conservation*; python -m experiments.plantcad.scripts.exp_pc1_eval --prefix local_store --force_run_failed true
+
+# Checkpoint upload
+find local_store | grep -E 'hf/step-[0-9]+$' | xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v2_train {} {} --repo-type model" | bash /dev/stdin
 ```
 
 ```bash
@@ -125,6 +139,18 @@ roc_auc  step                                                                   
 0.589215 18403 hf://plantcad/_dev_marin_plantcad1_v1_train/local_store/checkpoints/plantcad-train-300m-r02-432442/hf/step-18403
 0.588738 20076 hf://plantcad/_dev_marin_plantcad1_v1_train/local_store/checkpoints/plantcad-train-300m-r02-432442/hf/step-20076
 0.593178 21749 hf://plantcad/_dev_marin_plantcad1_v1_train/local_store/checkpoints/plantcad-train-300m-r02-432442/hf/step-21749
+```
+
+Second iteration:
+
+```
+ python experiments/plantcad/misc/agg_eval_results.py
+ roc_auc  step                                                                                                  checkpoint_path
+0.549341  2678  hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-2678
+0.566597  5356  hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-5356
+0.604521  8034  hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-8034
+0.626729 10712 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-10712
+0.631095 13390 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-13390
 ```
 
 ## EDA

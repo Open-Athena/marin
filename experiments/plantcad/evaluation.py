@@ -22,7 +22,6 @@ import os
 import json
 import dataclasses
 from dataclasses import dataclass
-from typing import Any
 from collections.abc import Callable
 from datasets import Dataset
 
@@ -38,7 +37,6 @@ import fsspec
 from huggingface_hub import HfApi
 from transformers import AutoModelForCausalLM
 from levanter.callbacks import StepInfo
-from levanter.utils.tree_utils import inference_mode
 from marin.utilities.json_encoder import CustomJsonEncoder
 
 from experiments.plantcad.utils import get_available_gpus, get_nucleotide_token_ids, get_plantcad_tokenizer
@@ -48,20 +46,11 @@ logger = logging.getLogger("ray")
 
 
 @dataclass
-class DnaEvalConfig:
-    """Configuration for DNA model evolutionary conservation evaluation"""
-
-    checkpoint_path: str | InputName
-    """Path to the model checkpoint directory"""
+class DnaEvalBaseConfig:
+    """Base configuration for DNA evaluation with fields needed for training callbacks"""
 
     model_config: str
     """Model configuration size (e.g., '300m', '100m', etc.)"""
-
-    device: str = "cuda"
-    """Device to use for model inference (e.g., 'cuda', 'cpu')"""
-
-    dtype: str | None = None
-    """Dtype to use for model inference (e.g., 'float32', 'float16', 'bfloat16' or any torch dtype)"""
 
     dataset_path: str = "plantcad/evolutionary-constraint-example"
     """Dataset repository path"""
@@ -75,14 +64,28 @@ class DnaEvalConfig:
     batch_size: int = 32
     """Batch size to use for inference"""
 
-    num_workers: int | None = None
-    """Number of workers to use for parallel evaluation (defaults to number of GPUs if None)"""
-
     max_samples: int | None = None
     """Maximum number of samples to evaluate (for quick testing)"""
 
-    random_seed: int = versioned(42)
+    random_seed: int = 42
     """Random seed for data shuffling prior to downsampling"""
+
+
+@dataclass
+class DnaEvalConfig(DnaEvalBaseConfig):
+    """Configuration for standalone DNA model evolutionary conservation evaluation"""
+
+    checkpoint_path: str | InputName | None = None
+    """Path to the model checkpoint directory (None for training callbacks)"""
+
+    device: str = "cuda"
+    """Device to use for model inference (e.g., 'cuda', 'cpu')"""
+
+    dtype: str | None = None
+    """Dtype to use for model inference (e.g., 'float32', 'float16', 'bfloat16' or any torch dtype)"""
+
+    num_workers: int | None = None
+    """Number of workers to use for parallel evaluation (defaults to number of GPUs if None)"""
 
     revision: str = versioned("0.1")
     """Revision number to force re-runs when needed"""
@@ -380,6 +383,8 @@ def compute_causal_conservation(
 
     # Run inference for all reference/alternate sequences
     logits = logit_function(batch_alt_sequences)
+    # Always promote to full precision for zero-shot evaluation
+    logits = logits.astype(jnp.float32)
     Vocab = logits.resolve_axis("vocab")
     assert logits.axes == (VariantBatch, Position, Vocab)
 
@@ -406,6 +411,7 @@ def score_eval_dataset(
     eval_dataset: Dataset,
     logit_function: Callable[[TokenArray], LogitArray],
     batch_size: int = 32,
+    log_progress: bool = True,
 ) -> ConservationResult:
     """Score evaluation dataset based on zero-shot conservation prediction."""
 
@@ -420,7 +426,8 @@ def score_eval_dataset(
     batches = eval_dataset.with_format(None).batch(batch_size=batch_size)
     total_batches = len(batches)
     progress_interval = max(1, total_batches // 20)  # Every 5%
-    logger.info(f"Processing {len(eval_dataset)} samples in {total_batches} batches (batch_size={batch_size})")
+    if log_progress:
+        logger.info(f"Processing {len(eval_dataset)} samples in {total_batches} batches (batch_size={batch_size})")
 
     for batch_index, batch_data in enumerate(batches):
         # Tokenize sequences
@@ -451,7 +458,7 @@ def score_eval_dataset(
         total_processed += len(sequences)
 
         # Log progress every 5% of batches
-        if batch_index % progress_interval == 0 or batch_index == total_batches - 1:
+        if log_progress and (batch_index % progress_interval == 0 or batch_index == total_batches - 1):
             progress_pct = ((batch_index + 1) / total_batches) * 100
             logger.info(
                 f"Progress: {batch_index + 1}/{total_batches} batches ({progress_pct:.1f}%) - "
@@ -466,44 +473,7 @@ def score_eval_dataset(
 # ------------------------------------------------------------------------------------------------
 
 
-def evaluate_dna_conservation(
-    tokenizer: AutoTokenizer,
-    logit_function: Callable[[Any], Any],
-    eval_dataset: Dataset,
-    batch_size: int = 32,
-    step: int | None = None,
-) -> dict[str, float]:
-    """
-    Core evaluation logic - works for both training callbacks and standalone evaluation.
-
-    Args:
-        logit_function: Function that takes tokens and returns logits
-        eval_dataset: HuggingFace dataset with 'seq' field and binary 'label' field
-        batch_size: Batch size for evaluation
-        step: Training step (for logging), None for standalone
-
-    Returns:
-        Dictionary with evaluation metrics including ROC AUC
-    """
-    # Collect scores and labels using shared function
-    result = score_eval_dataset(
-        tokenizer=tokenizer, logit_function=logit_function, eval_dataset=eval_dataset, batch_size=batch_size
-    )
-
-    # Calculate metrics using shared function
-    results = evaluate_conservation_scores(result)
-
-    # Log during training, log for standalone
-    if step is not None:
-        levanter.tracker.log({"eval/dna_conservation/roc": results["roc_auc"]}, step=step)
-        logger.info(f"Step {step}: ROC AUC = {results['roc_auc']:.3f}")
-    else:
-        logger.info(f"ROC AUC = {results['roc_auc']:.4f} ({results['n_total']} valid nucleotides)")
-
-    return results
-
-
-def create_dna_eval_callback(config: DnaEvalConfig) -> Callable[[StepInfo], None]:
+def create_dna_eval_callback(config: DnaEvalBaseConfig) -> Callable[[StepInfo], None]:
     """Create a training callback for DNA evaluation."""
 
     # Load tokenizer
@@ -514,23 +484,41 @@ def create_dna_eval_callback(config: DnaEvalConfig) -> Callable[[StepInfo], None
     dataset = load_eval_dataset(config)
 
     def dna_conservation_callback(step_info: StepInfo) -> None:
-        # Put model in inference mode
-        eval_model = inference_mode(step_info.state.model, True)
+        step = step_info.step
+        logger.debug(f"Running DNA conservation evaluation ({step=})")
+        eval_model = step_info.eval_model
 
         # Create logit function for Levanter model
         def logit_function(
             tokens: ht.Int[ht.NamedArray, "batch position"],
         ) -> ht.Float[ht.NamedArray, "batch position vocab"]:
-            # TODO: validate input / output types
-            return eval_model(tokens)
+            logits = eval_model(tokens)
+            return logits
 
-        # Run evaluation
-        evaluate_dna_conservation(
+        # Compute scores with binary labels
+        scores = score_eval_dataset(
             tokenizer=tokenizer,
             logit_function=logit_function,
-            eval_dataset=dataset,  # Use the loaded dataset
+            eval_dataset=dataset,
             batch_size=config.batch_size,
+            # TODO: make configurable or disable?
+            log_progress=True,
+        )
+
+        # Evaluate scores and labels
+        metrics = evaluate_conservation_scores(scores)
+
+        # Log results
+        levanter.tracker.log(
+            {
+                "eval/dna_conservation_roc": metrics["roc_auc"],
+            },
             step=step_info.step,
+        )
+
+        logger.info(
+            f"DNA conservation evaluation complete ({step=}): "
+            f"ROC AUC = {metrics['roc_auc']:.4f}, n_samples = {metrics['n_total']}"
         )
 
     return dna_conservation_callback
@@ -614,7 +602,11 @@ def generate_conservation_scores(config: DnaEvalConfig, worker_id: int = 0, num_
 
     # Generate raw conservation scores and labels
     result = score_eval_dataset(
-        tokenizer=tokenizer, logit_function=logit_function, eval_dataset=dataset, batch_size=config.batch_size
+        tokenizer=tokenizer,
+        logit_function=logit_function,
+        eval_dataset=dataset,
+        batch_size=config.batch_size,
+        log_progress=True,
     )
 
     logger.info(f"Generated {len(result.scores)} conservation scores")
@@ -640,10 +632,7 @@ def evaluate_conservation_scores(scores: ConservationResult) -> dict[str, float]
     if len(scores.scores) == 0:
         raise ValueError("No valid conservation scores found")
 
-    # Log total before filtering and filter out NaN scores
     n_unmasked_total = len(scores.scores)
-    logger.info(f"n_unmasked_total: {n_unmasked_total}")
-
     valid_mask = ~np.isnan(scores.scores)
     filtered_scores = np.array(scores.scores)[valid_mask]
     filtered_labels = np.array(scores.labels)[valid_mask]
@@ -691,7 +680,8 @@ def save_conservation_results(config: DnaEvalConfig, results: dict[str, float]) 
     logger.info(f"Saved evaluation results to: {results_file}")
 
 
-@ray.remote(max_calls=1)
+# TODO: fix this which forces only one checkpoint to run at a time
+@ray.remote(max_calls=1, resources={"head_node": 1})
 def run_conservation_eval(config: DnaEvalConfig) -> dict[str, float]:
     # Determine number of workers
     if config.num_workers is None:

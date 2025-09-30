@@ -386,6 +386,7 @@ def default_train(
         data_seed=train_config.data_seed,
         eval_harness_steps=train_config.steps_per_task_eval or 10000,
         eval_harness=harness_config,
+        eval_plugins=train_config.eval_plugins,
     )
 
     # Create the pod config

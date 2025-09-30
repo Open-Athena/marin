@@ -24,7 +24,8 @@ dependencies = [
     "google-cloud-storage-transfer",
     "jax==0.6.2",
     "haliax>=1.4.dev381",
-    "levanter[serve]@git+https://github.com/marin-community/levanter.git",
+    #"levanter[serve]@git+https://github.com/marin-community/levanter.git",
+    "levanter[serve]@git+https://github.com/eric-czech/levanter.git",
     "lz4",
     "multiprocess==0.70.16",
     "numpy",
@@ -279,7 +280,7 @@ pm = [
 ]
 
 dna = [
-    "scikit-learn",
+    "scikit-learn>=1.2.1",
 ]
 
 [tool.black]

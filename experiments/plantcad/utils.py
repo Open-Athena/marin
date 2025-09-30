@@ -26,7 +26,6 @@ from transformers import AutoTokenizer
 from experiments.defaults import default_tokenize
 from levanter.data.text import TextLmDatasetFormat
 from levanter.models.llama import LlamaConfig
-from marin.execution.executor import ExecutorStep, InputName
 
 # Constants for PlantCAD experiments
 PLANTCAD_TOKENIZER = "kuleshov-group/PlantCaduceus_l20"
@@ -64,7 +63,7 @@ def get_nucleotide_token_ids(tokenizer: AutoTokenizer):
     return nucleotide_ids
 
 
-def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m", "300m"] = "30m") -> LlamaConfig:
+def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m", "300m", "600m", "1b"] = "30m") -> LlamaConfig:
     if model_size == "nano":
         # Testing configuration - keep small for fast iteration
         return LlamaConfig(
@@ -76,7 +75,6 @@ def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m", "300m"
             num_layers=2,
         )
     elif model_size == "10m":
-        # Optimized 10M parameter configuration for genomic data
         return LlamaConfig(
             seq_len=512,
             hidden_dim=256,
@@ -86,7 +84,6 @@ def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m", "300m"
             num_layers=10,
         )
     elif model_size == "30m":
-        # Optimized 30M parameter configuration for genomic data (default)
         return LlamaConfig(
             seq_len=512,
             hidden_dim=512,
@@ -96,7 +93,6 @@ def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m", "300m"
             num_layers=8,
         )
     elif model_size == "100m":
-        # Optimized 100M parameter configuration for genomic data
         return LlamaConfig(
             seq_len=512,
             hidden_dim=768,
@@ -106,7 +102,6 @@ def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m", "300m"
             num_layers=12,
         )
     elif model_size == "300m":
-        # Optimized 300M parameter configuration for genomic data
         return LlamaConfig(
             seq_len=512,
             hidden_dim=1024,
@@ -115,43 +110,28 @@ def get_plantcad_config(model_size: Literal["nano", "10m", "30m", "100m", "300m"
             num_kv_heads=16,
             num_layers=22,
         )
+    elif model_size == "600m":
+        return LlamaConfig(
+            seq_len=512,
+            hidden_dim=1408,
+            intermediate_dim=4224,
+            num_heads=22,
+            num_kv_heads=22,
+            num_layers=24,
+        )
+    elif model_size == "1b":
+        return LlamaConfig(
+            seq_len=512,
+            hidden_dim=1664,
+            intermediate_dim=4992,
+            num_heads=26,
+            num_kv_heads=26,
+            num_layers=28,
+        )
     else:
-        raise ValueError(f"Unknown model size: {model_size}. Choose from: 'nano', '10m', '30m', '100m', '300m'")
-
-
-def create_dna_conservation_eval_step(
-    checkpoint_step: ExecutorStep | InputName,
-    max_steps: int = 99,
-    max_samples: int = 1000,
-    random_seed: int = 42,
-) -> ExecutorStep:
-    """
-    Create an ExecutorStep for DNA model evaluation on evolutionary constraints.
-
-    Args:
-        checkpoint_step: Training step that produced the model checkpoint
-        model_config: Model configuration (currently unused but kept for compatibility)
-            - TODO: Is this necessary if the HF checkpoint isn't for an arch in `transformers`?
-        max_samples: Maximum number of evaluation samples
-        random_seed: Random seed for data shuffling
-
-    Returns:
-        ExecutorStep configured for DNA evolutionary constraint evaluation
-    """
-    from experiments.plantcad.evaluation import run_dna_evaluation, DnaEvalConfig
-
-    return ExecutorStep(
-        name=f"evaluation/dna-conservation/{checkpoint_step.name}",
-        fn=run_dna_evaluation,
-        config=DnaEvalConfig(
-            checkpoint_path=checkpoint_step / "hf" / f"step-{max_steps}",
-            max_samples=max_samples,
-            random_seed=random_seed,
-        ),
-        # pip_dependency_groups=["eval"],
-        # pip_dependency_groups=["dna"],
-        description="Zero-shot evolutionary conservation prediction evaluation for DNA model",
-    )
+        raise ValueError(
+            f"Unknown model size: {model_size}. Choose from: 'nano', '10m', '30m', '100m', '300m', '600m', '1b'"
+        )
 
 
 def get_plantcad_training_dataset(use_pretokenized: bool = True):
@@ -193,14 +173,18 @@ def get_checkpoints(checkpoint_dir: str) -> list[dict[str, str | int]]:
         List of dictionaries containing checkpoint path and step number
     """
     fs, _ = fsspec.url_to_fs(checkpoint_dir)
+    protocol = fsspec.utils.get_protocol(checkpoint_dir)
     paths = []
     for checkpoint_path in fs.glob(os.path.join(checkpoint_dir, "step-*")):
-        checkpoint_path = fs.unstrip_protocol(checkpoint_path)
+        if protocol != "file":
+            checkpoint_path = fs.unstrip_protocol(checkpoint_path)
         match = re.search(r"step-(\d+)$", checkpoint_path.split("/")[-1])
         if not match:
             raise ValueError(f"Failed to extract step number from checkpoint path: {checkpoint_path}")
         step = int(match.group(1))
         paths.append(dict(path=checkpoint_path, step=step))
+    # Sort by latest checkpoint first
+    paths = sorted(paths, key=lambda x: x["step"], reverse=True)
     return paths
 
 

@@ -28,8 +28,10 @@ logger = logging.getLogger("ray")
 
 # Script parameters
 # TODO: Create task/config for multi-checkpoint evaluation
-checkpoint_dir = "hf://plantcad/_dev_marin_plantcad1_v1_train/local_store/checkpoints/plantcad-train-300m-r02-432442/hf"
-model_config: str = "300m"
+# checkpoint_dir = "hf://plantcad/_dev_marin_plantcad1_v1_train/local_store/checkpoints/plantcad-train-300m-r02-432442/hf"
+checkpoint_dir = "hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf"
+# checkpoint_dir = "local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf"
+model_config: str = "600m"
 batch_size: int = 32
 max_samples: int | None = None
 dtype: str | None = "bfloat16"
