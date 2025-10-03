@@ -147,9 +147,11 @@ git add .gitignore pyproject.toml CLAUDE.md lib/ Makefile mkdocs.yml .github/wor
 # Clean up temp file
 rm -f tmp/pyproject.toml.migration-backup
 
+# Commit the changes
 echo ""
-echo "Migration complete! Next steps:"
-echo "1. Review the changes with: git status"
-echo "2. Commit the changes: git commit -m 'Your message'"
-echo "3. Test imports: uv run python -c 'import marin; print(\"Success\")'"
-echo "4. Update CI/docs as needed"
+echo "Committing migration..."
+git commit -m '`uv`-workspace-ification, pt 1: marin, data_browser'
+
+echo ""
+echo "Migration complete!"
+echo "Test imports: uv run python -c 'import marin; print(\"Success\")'"

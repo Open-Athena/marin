@@ -40,10 +40,6 @@ fi
 echo "Running migration script..."
 ./workspace-migration/step-1.sh "$CURRENT_BRANCH"
 
-# Commit the migration changes
-echo "Committing migration changes..."
-git commit -m '`uv`-workspace-ification, pt 1: marin, data_browser'
-
 # Compare trees
 echo ""
 echo "Comparing trees..."
