@@ -33,11 +33,15 @@ echo "Fetching workspace-migration/ from gist..."
 GIST_URL="https://gist.github.com/161fa24ff51c2df6466b5305801050b6.git"
 MIGRATION_DIR="/tmp/marin-workspace-migration-$$"
 git clone "$GIST_URL" "$MIGRATION_DIR"
-chmod +x "$MIGRATION_DIR/step-1.sh" "$MIGRATION_DIR/test-step-1.sh"
+
+# Copy scripts into workspace-migration/ directory
+mkdir -p workspace-migration
+cp "$MIGRATION_DIR"/*.sh "$MIGRATION_DIR"/*.patch "$MIGRATION_DIR"/*.md workspace-migration/
+chmod +x workspace-migration/step-1.sh workspace-migration/test-step-1.sh
 
 # Run migration script with current branch as reference
 echo "Running migration script..."
-"$MIGRATION_DIR/step-1.sh" "$CURRENT_BRANCH"
+./workspace-migration/step-1.sh "$CURRENT_BRANCH"
 
 # Commit the migration changes
 echo "Committing migration changes..."
