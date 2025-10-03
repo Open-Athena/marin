@@ -121,6 +121,11 @@ rm -rf local_store/evaluation/dna-conservation*; python -m experiments.plantcad.
 
 # Checkpoint upload
 find local_store | grep -E 'hf/step-[0-9]+$' | xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v2_train {} {} --repo-type model" | bash /dev/stdin
+
+find local_store | grep -E 'checkpoints/step-[0-9]+$' | \
+grep -E 'step-26780$|step-24102|step-21424|step-18746$' | \
+xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v2_train {} {} --repo-type model" | \
+bash /dev/stdin
 ```
 
 ```bash
@@ -151,6 +156,12 @@ Second iteration:
 0.604521  8034  hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-8034
 0.626729 10712 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-10712
 0.631095 13390 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-13390
+0.607316 16068 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-16068
+0.622988 18746 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-18746
+0.639093 21424 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-21424
+0.650973 24102 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-24102
+0.657882 26780 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-26780
+0.657452 26782 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-26782
 ```
 
 ## EDA

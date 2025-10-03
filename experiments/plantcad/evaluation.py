@@ -660,7 +660,7 @@ def evaluate_conservation_scores(scores: ConservationResult) -> dict[str, float]
     logger.info("EVALUATION RESULTS")
     logger.info("=" * 50)
     logger.info(f"Total examples: {results['n_total']}")
-    logger.info(f"ROC AUC: {results['roc_auc']:.4f}")
+    logger.info(f"ROC AUC: {results['roc_auc']:.6f}")
     logger.info(f"Balance: {results['balance']:.3f} ({results['n_positive']}/{results['n_total']})")
     logger.info("=" * 50)
 

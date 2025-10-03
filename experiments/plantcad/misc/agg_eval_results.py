@@ -21,9 +21,9 @@ import pandas as pd
 
 def main():
     data = []
-    base_dir = "/home/ubuntu/sky_workdir/local_store/evaluation"
+    base_dir = "~/sky_workdir/local_store/evaluation"
 
-    for eval_dir in Path(base_dir).glob("dna-conservation-*"):
+    for eval_dir in Path(base_dir).expanduser().glob("dna-conservation-*"):
         with open(eval_dir / "results.json") as f:
             result = json.load(f)
         config = result.get("config", {})
