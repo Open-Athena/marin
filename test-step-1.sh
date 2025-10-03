@@ -28,16 +28,13 @@ git checkout -b "$TEST_BRANCH" "$PARENT_COMMIT"
 echo "Removing migration artifacts if present..."
 rm -rf lib/
 
-# Fetch workspace-migration scripts from gist
-echo "Fetching workspace-migration/ from gist..."
-GIST_URL="https://gist.github.com/161fa24ff51c2df6466b5305801050b6.git"
-MIGRATION_DIR="/tmp/marin-workspace-migration-$$"
-git clone "$GIST_URL" "$MIGRATION_DIR"
-
-# Copy scripts into workspace-migration/ directory
-mkdir -p workspace-migration
-cp "$MIGRATION_DIR"/*.sh "$MIGRATION_DIR"/*.patch "$MIGRATION_DIR"/*.md workspace-migration/
-chmod +x workspace-migration/step-1.sh workspace-migration/test-step-1.sh
+# Fetch workspace-migration scripts from gist (if not already present)
+if [ ! -d "workspace-migration" ]; then
+    echo "Fetching workspace-migration/ from gist..."
+    GIST_URL="https://gist.github.com/161fa24ff51c2df6466b5305801050b6.git"
+    git clone "$GIST_URL" workspace-migration
+    chmod +x workspace-migration/step-1.sh workspace-migration/test-step-1.sh
+fi
 
 # Run migration script with current branch as reference
 echo "Running migration script..."
