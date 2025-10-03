@@ -28,14 +28,14 @@ git checkout -b "$TEST_BRANCH" "$PARENT_COMMIT"
 echo "Removing migration artifacts if present..."
 rm -rf lib/
 
-# Extract workspace-migration/ scripts from the original branch
-echo "Extracting workspace-migration/ from $CURRENT_BRANCH..."
-mkdir -p workspace-migration
-git show "$CURRENT_BRANCH:workspace-migration/step-1.sh" > workspace-migration/step-1.sh
-git show "$CURRENT_BRANCH:workspace-migration/test-step-1.sh" > workspace-migration/test-step-1.sh
-git show "$CURRENT_BRANCH:workspace-migration/README.md" > workspace-migration/README.md
-git show "$CURRENT_BRANCH:workspace-migration/pyproject-root.patch" > workspace-migration/pyproject-root.patch
-git show "$CURRENT_BRANCH:workspace-migration/pyproject-lib-marin.patch" > workspace-migration/pyproject-lib-marin.patch
+# Fetch workspace-migration scripts from gist
+echo "Fetching workspace-migration/ from gist..."
+GIST_URL="https://gist.github.com/161fa24ff51c2df6466b5305801050b6.git"
+if [ -d "workspace-migration/.git" ]; then
+    (cd workspace-migration && git pull)
+else
+    git clone "$GIST_URL" workspace-migration
+fi
 chmod +x workspace-migration/step-1.sh workspace-migration/test-step-1.sh
 
 # Run migration script with current branch as reference
