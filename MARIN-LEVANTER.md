@@ -6,30 +6,37 @@ This directory contains migration scripts and notes for the [uv workspace migrat
 
 ## Contents <a id="toc"></a>
 
-**Step 1: marin + data_browser workspace**
+- [Step 1 ✅: marin + data_browser workspace](#step-1)
+  - [Migration Script](#step-1-migration-script)
+  - [Files Updated](#step-1-files-updated)
+  - [Testing](#step-1-testing)
+  - [Testing Checklist](#step-1-testing-checklist)
+  - [Result](#step-1-result)
+  - [Files](#step-1-files)
+    - [`step-1.sh`](#step-1sh) ([📄](#file-step-1-sh))
+    - [`step-1-test.sh`](#step-1-testsh) ([📄](#file-step-1-test-sh))
+    - [`step-1-pyproject-root.patch`](#step-1-pyproject-rootpatch) ([📄](#file-step-1-pyproject-root-patch))
+    - [`step-1-pyproject-lib-marin.patch`](#step-1-pyproject-lib-marinpatch) ([📄](#file-step-1-pyproject-lib-marin-patch))
+    - [`step-1-ray_deps.patch`](#step-1-ray_depspatch) ([📄](#file-step-1-ray_deps-patch))
+    - [`step-1-resolve-conflicts.sh`](#step-1-resolve-conflictssh) ([📄](#file-step-1-resolve-conflicts-sh))
+- [Step 2 ✅: Levanter integration](#step-2)
+  - [Files](#step-2-files)
+    - [`step-2-init.sh`](#step-2-initsh) ([📄](#file-step-2-init-sh))
+    - [`step-2-sync.sh`](#step-2-syncsh) ([📄](#file-step-2-sync-sh))
+    - [`step-2.sh`](#step-2sh) ([📄](#file-step-2-sh))
+- [Step 3 ✋: Haliax integration](#step-3)
 
-- [`step-1.sh`](#step-1sh) ([📄](#file-step-1-sh)) - Main migration script
-- [`step-1-test.sh`](#step-1-testsh) ([📄](#file-step-1-test-sh)) - Test script to verify reproducibility
-- [`step-1-pyproject-root.patch`](#step-1-pyproject-rootpatch) ([📄](#file-step-1-pyproject-root-patch)) - Transform root pyproject.toml to workspace root
-- [`step-1-pyproject-lib-marin.patch`](#step-1-pyproject-lib-marinpatch) ([📄](#file-step-1-pyproject-lib-marin-patch)) - Create lib/marin/pyproject.toml
-- [`step-1-ray_deps.patch`](#step-1-ray_depspatch) ([📄](#file-step-1-ray_deps-patch)) - Fix ray_deps.py for workspace structure
-- [`step-1-resolve-conflicts.sh`](#step-1-resolve-conflictssh) ([📄](#file-step-1-resolve-conflicts-sh)) - Resolve merge conflicts during migration
+## Step 1 ✅: marin + data_browser workspace <a id="step-1"></a>
 
-**Step 2: Levanter integration**
+See [PR #1690][pr-1690] for the implementation.
 
-- [`step-2-init.sh`](#step-2-initsh) ([📄](#file-step-2-init-sh)) - Initialize Levanter as workspace member
-- [`step-2-sync.sh`](#step-2-syncsh) ([📄](#file-step-2-sync-sh)) - Sync Levanter updates from upstream
-- [`step-2.sh`](#step-2sh) ([📄](#file-step-2-sh)) - Main Step 2 migration script
-
-## Step 1: marin + data_browser workspace
-
-### Migration Script
+### Migration Script <a id="step-1-migration-script"></a>
 
 Run `./workspace-migration/step-1.sh [REFERENCE_BRANCH]` from the repo root to replay the workspace restructuring on a clean branch.
 
 The script accepts an optional "reference branch" argument, which it can copy from (for files whose content is essentially new in "step 1", not a modification of existing files). If not provided, it will fall back to `rw/ws` on a `marin-community/marin` remote.
 
-### Files Updated by Script
+### Files Updated <a id="step-1-files-updated"></a>
 
 The migration script automatically handles all path updates:
 
@@ -42,7 +49,7 @@ The migration script automatically handles all path updates:
 7. **`CLAUDE.md`** - Create from reference branch
 8. **Documentation files** - Update GitHub URLs from `/blob/main/src/marin/` → `/blob/<doc-branch>/lib/marin/src/marin/` (uses `MARIN_DOC_BRANCH` env var, defaults to `main`)
 
-### Testing the Migration
+### Testing <a id="step-1-testing"></a>
 
 Run `./workspace-migration/step-1-test.sh` to verify the migration is reproducible. This creates an ephemeral test branch from the parent commit, replays the migration, and compares the resulting tree. On success, it cleans up and returns to the original branch.
 
@@ -55,7 +62,7 @@ The following do NOT need updates because they work with the new structure:
 - **Tests** - Import `marin` as a package, which works with the workspace setup
 - **Experiments** - Import `from marin.X`, which works because the workspace root depends on the `marin` member
 
-### Testing Checklist
+### Testing Checklist <a id="step-1-testing-checklist"></a>
 
 After migration:
 
@@ -67,7 +74,7 @@ After migration:
 - [ ] Docker builds work (test locally if possible)
 - [ ] Experiments can still import from `marin` package
 
-### Result
+### Result <a id="step-1-result"></a>
 
 After this step, the structure is:
 
@@ -84,9 +91,9 @@ marin/
       ...
 ```
 
-## File Details
+### Files <a id="step-1-files"></a>
 
-### step-1.sh [📄](#file-step-1-sh) <a id="step-1sh"></a>
+#### step-1.sh [📄](#file-step-1-sh) <a id="step-1sh"></a>
 
 Main migration script that:
 1. Moves `src/` → `lib/marin/src/` and `data_browser/` → `lib/data_browser/`
@@ -95,7 +102,7 @@ Main migration script that:
 4. Runs `uv sync` to update lockfile for workspace structure (preserving package versions)
 5. Commits the migration
 
-### step-1-test.sh [📄](#file-step-1-test-sh) <a id="step-1-testsh"></a>
+#### step-1-test.sh [📄](#file-step-1-test-sh) <a id="step-1-testsh"></a>
 
 Test harness that verifies step-1.sh is reproducible:
 1. Creates ephemeral test branch from parent commit
@@ -103,47 +110,49 @@ Test harness that verifies step-1.sh is reproducible:
 3. Compares resulting git tree hash with original migration commit
 4. Cleans up on success or leaves test branch for inspection on failure
 
-### step-1-pyproject-root.patch [📄](#file-step-1-pyproject-root-patch) <a id="step-1-pyproject-rootpatch"></a>
+#### step-1-pyproject-root.patch [📄](#file-step-1-pyproject-root-patch) <a id="step-1-pyproject-rootpatch"></a>
 
 Transforms root `pyproject.toml` from package config to workspace root config. Key changes:
 - Adds `[tool.uv.workspace]` with `members = ["lib/*"]`
 - Preserves dependencies as workspace root dependencies
 - Updates package name to `marin-root`
 
-### step-1-pyproject-lib-marin.patch [📄](#file-step-1-pyproject-lib-marin-patch) <a id="step-1-pyproject-lib-marinpatch"></a>
+#### step-1-pyproject-lib-marin.patch [📄](#file-step-1-pyproject-lib-marin-patch) <a id="step-1-pyproject-lib-marinpatch"></a>
 
 Creates `lib/marin/pyproject.toml` from original root pyproject.toml. Key changes:
 - Keeps `marin` as package name
 - Moves package-specific dependencies and extras
 - Updates paths for new structure
 
-### step-1-ray_deps.patch [📄](#file-step-1-ray_deps-patch) <a id="step-1-ray_depspatch"></a>
+#### step-1-ray_deps.patch [📄](#file-step-1-ray_deps-patch) <a id="step-1-ray_depspatch"></a>
 
 Fixes `lib/marin/src/marin/run/ray_deps.py` to work with workspace structure:
 - Adds `--package marin` flag to `uv export` command
 - Required because workspace root contains multiple packages and uv needs to know which package's extras to use
 
-### step-1-resolve-conflicts.sh [📄](#file-step-1-resolve-conflicts-sh) <a id="step-1-resolve-conflictssh"></a>
+#### step-1-resolve-conflicts.sh [📄](#file-step-1-resolve-conflicts-sh) <a id="step-1-resolve-conflictssh"></a>
 
 Helper script for resolving merge conflicts during migration replays. Used when applying migration on branches that have diverged from main.
 
-### step-2-init.sh [📄](#file-step-2-init-sh) <a id="step-2-initsh"></a>
+## Step 2 ✅: Levanter integration <a id="step-2"></a>
+
+### Files <a id="step-2-files"></a>
+
+#### step-2-init.sh [📄](#file-step-2-init-sh) <a id="step-2-initsh"></a>
 
 Initialize Levanter as workspace member. First script in the Step 2 migration sequence.
 
-### step-2-sync.sh [📄](#file-step-2-sync-sh) <a id="step-2-syncsh"></a>
+#### step-2-sync.sh [📄](#file-step-2-sync-sh) <a id="step-2-syncsh"></a>
 
 Sync Levanter updates from upstream. Used to keep Levanter member in sync with upstream repository.
 
-### step-2.sh [📄](#file-step-2-sh) <a id="step-2sh"></a>
+#### step-2.sh [📄](#file-step-2-sh) <a id="step-2sh"></a>
 
 Main Step 2 migration script for adding Levanter as a workspace member.
 
-## Next Steps
+## Step 3 ✋: Haliax integration <a id="step-3"></a>
 
-See the [uv workspace migration plan][migration-plan] for the complete roadmap:
-- **Step 3**: Add Haliax as a workspace member
-- **Step Omega**: Further split into `marin-core`, `marin-crawl`, `ray_tpu`, `rl`, `thalas` packages
+See the [uv workspace migration plan][migration-plan] for details. Coming soon!
 
 [migration-plan]: https://github.com/marin-community/marin/blob/rw%2Fws/CLAUDE.md#repo-reorg
 [pr-1690]: https://github.com/marin-community/marin/pull/1690
