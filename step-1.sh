@@ -131,14 +131,9 @@ else
     git diff "$PARENT_COMMIT" "$REFERENCE_BRANCH" -- .github/workflows/unit-tests.yaml .github/workflows/docs.yaml | git apply -p0
 fi
 
-# Copy uv.lock from reference branch
-echo "Copying uv.lock from reference branch..."
-git show "$REFERENCE_BRANCH:uv.lock" > uv.lock || {
-    echo "WARNING: Could not extract uv.lock from $REFERENCE_BRANCH, generating new one..."
-    rm -f uv.lock
-    echo 'Running `RUST_LOG=warn uv sync` to generate lockfile...'
-    RUST_LOG=warn uv sync
-}
+# Update uv.lock for workspace structure (preserves existing pins)
+echo "Updating uv.lock for workspace structure..."
+RUST_LOG=warn uv sync
 
 # Stage all changes (git mv and git rm --cached already staged, add new files)
 echo "Staging changes..."
