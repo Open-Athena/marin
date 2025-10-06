@@ -121,6 +121,8 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
     sed -i '' "s|/blob/main/src/marin/|/blob/$DOC_BRANCH_ENCODED/lib/marin/src/marin/|g" docs/tutorials/submitting-speedrun.md docs/tutorials/datashop.md docs/explanations/executor.md docs/explanations/evaluation.md docs/reports/markdownified-datasets.md docs/explanations/speedrun-flops-accounting.md
     # Apply workflow patches from reference branch
     git diff "$PARENT_COMMIT" "$REFERENCE_BRANCH" -- .github/workflows/unit-tests.yaml .github/workflows/docs.yaml | git apply -p0
+    # Apply ray_deps.py CI fix
+    patch -p0 < "$SCRIPT_DIR/ray_deps.patch"
 else
     sed -i 's|src/marin/cluster/config\.py|lib/marin/src/marin/cluster/config.py|g' Makefile
     sed -i 's|src/marin/cluster/config\.py|lib/marin/src/marin/cluster/config.py|g' .github/workflows/build-docker-images.yaml
@@ -129,6 +131,8 @@ else
     sed -i "s|/blob/main/src/marin/|/blob/$DOC_BRANCH_ENCODED/lib/marin/src/marin/|g" docs/tutorials/submitting-speedrun.md docs/tutorials/datashop.md docs/explanations/executor.md docs/explanations/evaluation.md docs/reports/markdownified-datasets.md docs/explanations/speedrun-flops-accounting.md
     # Apply workflow patches from reference branch
     git diff "$PARENT_COMMIT" "$REFERENCE_BRANCH" -- .github/workflows/unit-tests.yaml .github/workflows/docs.yaml | git apply -p0
+    # Apply ray_deps.py CI fix
+    patch -p0 < "$SCRIPT_DIR/ray_deps.patch"
 fi
 
 # Update uv.lock for workspace structure (preserves existing pins)
