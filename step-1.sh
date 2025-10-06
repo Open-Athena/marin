@@ -43,13 +43,18 @@ if [ -d "lib" ]; then
     exit 1
 fi
 
+# Helper function for cross-platform sed in-place editing
+sed_inplace() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
 # Update .gitignore to allow lib/ and CLAUDE.md
 echo "Updating .gitignore..."
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' '/^lib\/$/d; /^CLAUDE\.md$/d' .gitignore
-else
-    sed -i '/^lib\/$/d; /^CLAUDE\.md$/d' .gitignore
-fi
+sed_inplace '/^lib\/$/d; /^CLAUDE\.md$/d' .gitignore
 
 # Create lib directory structure
 echo "Creating lib/ directory structure..."
@@ -113,27 +118,26 @@ DOC_BRANCH="${MARIN_DOC_BRANCH:-main}"
 # URL-encode slashes
 DOC_BRANCH_ENCODED=$(echo "$DOC_BRANCH" | sed 's|/|%2F|g')
 
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' 's|src/marin/cluster/config\.py|lib/marin/src/marin/cluster/config.py|g' Makefile
-    sed -i '' 's|src/marin/cluster/config\.py|lib/marin/src/marin/cluster/config.py|g' .github/workflows/build-docker-images.yaml
-    sed -i '' 's|paths: \["\.", "src"\]|paths: [".", "lib/marin/src"]|' mkdocs.yml
-    sed -i '' 's|src/marin/speedrun/|lib/marin/src/marin/speedrun/|g' .github/workflows/update-leaderboard.yml
-    sed -i '' "s|/blob/main/src/marin/|/blob/$DOC_BRANCH_ENCODED/lib/marin/src/marin/|g" docs/tutorials/submitting-speedrun.md docs/tutorials/datashop.md docs/explanations/executor.md docs/explanations/evaluation.md docs/reports/markdownified-datasets.md docs/explanations/speedrun-flops-accounting.md
-    # Apply workflow patches from reference branch
-    git diff "$PARENT_COMMIT" "$REFERENCE_BRANCH" -- .github/workflows/unit-tests.yaml .github/workflows/docs.yaml | git apply -p0
-    # Apply ray_deps.py CI fix
-    patch -p0 < "$SCRIPT_DIR/ray_deps.patch"
-else
-    sed -i 's|src/marin/cluster/config\.py|lib/marin/src/marin/cluster/config.py|g' Makefile
-    sed -i 's|src/marin/cluster/config\.py|lib/marin/src/marin/cluster/config.py|g' .github/workflows/build-docker-images.yaml
-    sed -i 's|paths: \["\.", "src"\]|paths: [".", "lib/marin/src"]|' mkdocs.yml
-    sed -i 's|src/marin/speedrun/|lib/marin/src/marin/speedrun/|g' .github/workflows/update-leaderboard.yml
-    sed -i "s|/blob/main/src/marin/|/blob/$DOC_BRANCH_ENCODED/lib/marin/src/marin/|g" docs/tutorials/submitting-speedrun.md docs/tutorials/datashop.md docs/explanations/executor.md docs/explanations/evaluation.md docs/reports/markdownified-datasets.md docs/explanations/speedrun-flops-accounting.md
-    # Apply workflow patches from reference branch
-    git diff "$PARENT_COMMIT" "$REFERENCE_BRANCH" -- .github/workflows/unit-tests.yaml .github/workflows/docs.yaml | git apply -p0
-    # Apply ray_deps.py CI fix
-    patch -p0 < "$SCRIPT_DIR/ray_deps.patch"
-fi
+# Helper function for cross-platform sed in-place editing
+sed_inplace() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
+
+sed_inplace 's|src/marin/cluster/config\.py|lib/marin/src/marin/cluster/config.py|g' Makefile
+sed_inplace 's|src/marin/cluster/config\.py|lib/marin/src/marin/cluster/config.py|g' .github/workflows/build-docker-images.yaml
+sed_inplace 's|paths: \["\.", "src"\]|paths: [".", "lib/marin/src"]|' mkdocs.yml
+sed_inplace 's|src/marin/speedrun/|lib/marin/src/marin/speedrun/|g' .github/workflows/update-leaderboard.yml
+sed_inplace "s|/blob/main/src/marin/|/blob/$DOC_BRANCH_ENCODED/lib/marin/src/marin/|g" docs/tutorials/submitting-speedrun.md docs/tutorials/datashop.md docs/explanations/executor.md docs/explanations/evaluation.md docs/reports/markdownified-datasets.md docs/explanations/speedrun-flops-accounting.md
+
+# Apply workflow patches from reference branch
+git diff "$PARENT_COMMIT" "$REFERENCE_BRANCH" -- .github/workflows/unit-tests.yaml .github/workflows/docs.yaml | git apply -p0
+
+# Apply ray_deps.py CI fix
+patch -p0 < "$SCRIPT_DIR/ray_deps.patch"
 
 # Update uv.lock for workspace structure (preserves existing pins)
 echo "Updating uv.lock for workspace structure..."
