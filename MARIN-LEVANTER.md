@@ -2,16 +2,18 @@
 
 This directory contains the migration script and notes for **Step 1** of the uv workspace migration plan: initializing the workspace and folding `marin` and `data_browser` members into `lib/`.
 
-## Gist Contents
+## Contents <a id="toc"></a>
 
-- [`step-1.sh`](#step-1sh) - Main migration script for workspace initialization
-- [`test-step-1.sh`](#test-step-1sh) - Test script to verify migration reproducibility
-- [`pyproject-root.patch`](#pyproject-rootpatch) - Patch to transform root pyproject.toml to workspace root
-- [`pyproject-lib-marin.patch`](#pyproject-lib-marinpatch) - Patch to create lib/marin/pyproject.toml
-- [`ray_deps.patch`](#ray_depspatch) - Patch to fix ray_deps.py for workspace structure
-- [`resolve-conflicts.sh`](#resolve-conflictssh) - Helper for resolving merge conflicts during migration
-- [`step-2*.sh`](#step-2-scripts) - Scripts for Step 2 (Levanter integration)
-- [`README.md`](#readmemd) - This file
+- [`step-1.sh`](#step-1sh) ([📄](#file-step-1-sh)) - Main migration script for workspace initialization
+- [`test-step-1.sh`](#test-step-1sh) ([📄](#file-test-step-1-sh)) - Test script to verify migration reproducibility
+- [`pyproject-root.patch`](#pyproject-rootpatch) ([📄](#file-pyproject-root-patch)) - Patch to transform root pyproject.toml to workspace root
+- [`pyproject-lib-marin.patch`](#pyproject-lib-marinpatch) ([📄](#file-pyproject-lib-marin-patch)) - Patch to create lib/marin/pyproject.toml
+- [`ray_deps.patch`](#ray_depspatch) ([📄](#file-ray_deps-patch)) - Patch to fix ray_deps.py for workspace structure
+- [`resolve-conflicts.sh`](#resolve-conflictssh) ([📄](#file-resolve-conflicts-sh)) - Helper for resolving merge conflicts during migration
+- [`step-2-init.sh`](#step-2-initsh) ([📄](#file-step-2-init-sh)) - Initialize Levanter as workspace member
+- [`step-2-sync.sh`](#step-2-syncsh) ([📄](#file-step-2-sync-sh)) - Sync Levanter updates from upstream
+- [`step-2.sh`](#step-2sh) ([📄](#file-step-2-sh)) - Main Step 2 migration script
+- [`MARIN-LEVANTER.md`](#marin-levantermd) ([📄](#file-marin-levanter-md)) - This file
 
 ## Migration Script
 
@@ -76,7 +78,8 @@ marin/
 
 ## File Details
 
-### step-1.sh
+### step-1.sh [📄](#file-step-1-sh) <a id="step-1sh"></a>
+
 Main migration script that:
 1. Moves `src/` → `lib/marin/src/` and `data_browser/` → `lib/data_browser/`
 2. Applies patches to transform pyproject.toml files
@@ -84,38 +87,49 @@ Main migration script that:
 4. Runs `uv sync` to update lockfile for workspace structure (preserving package versions)
 5. Commits the migration
 
-### test-step-1.sh
+### test-step-1.sh [📄](#file-test-step-1-sh) <a id="test-step-1sh"></a>
+
 Test harness that verifies step-1.sh is reproducible:
 1. Creates ephemeral test branch from parent commit
 2. Runs step-1.sh
 3. Compares resulting git tree hash with original migration commit
 4. Cleans up on success or leaves test branch for inspection on failure
 
-### pyproject-root.patch
+### pyproject-root.patch [📄](#file-pyproject-root-patch) <a id="pyproject-rootpatch"></a>
+
 Transforms root `pyproject.toml` from package config to workspace root config. Key changes:
 - Adds `[tool.uv.workspace]` with `members = ["lib/*"]`
 - Preserves dependencies as workspace root dependencies
 - Updates package name to `marin-root`
 
-### pyproject-lib-marin.patch
+### pyproject-lib-marin.patch [📄](#file-pyproject-lib-marin-patch) <a id="pyproject-lib-marinpatch"></a>
+
 Creates `lib/marin/pyproject.toml` from original root pyproject.toml. Key changes:
 - Keeps `marin` as package name
 - Moves package-specific dependencies and extras
 - Updates paths for new structure
 
-### ray_deps.patch
+### ray_deps.patch [📄](#file-ray_deps-patch) <a id="ray_depspatch"></a>
+
 Fixes `lib/marin/src/marin/run/ray_deps.py` to work with workspace structure:
 - Adds `--package marin` flag to `uv export` command
 - Required because workspace root contains multiple packages and uv needs to know which package's extras to use
 
-### resolve-conflicts.sh
+### resolve-conflicts.sh [📄](#file-resolve-conflicts-sh) <a id="resolve-conflictssh"></a>
+
 Helper script for resolving merge conflicts during migration replays. Used when applying migration on branches that have diverged from main.
 
-### Step 2 scripts
-Scripts for Step 2 of the migration plan (Levanter integration):
-- `step-2-init.sh` - Initialize Levanter as workspace member
-- `step-2-sync.sh` - Sync Levanter updates from upstream
-- `step-2.sh` - Main Step 2 migration script
+### step-2-init.sh [📄](#file-step-2-init-sh) <a id="step-2-initsh"></a>
+
+Initialize Levanter as workspace member. First script in the Step 2 migration sequence.
+
+### step-2-sync.sh [📄](#file-step-2-sync-sh) <a id="step-2-syncsh"></a>
+
+Sync Levanter updates from upstream. Used to keep Levanter member in sync with upstream repository.
+
+### step-2.sh [📄](#file-step-2-sh) <a id="step-2sh"></a>
+
+Main Step 2 migration script for adding Levanter as a workspace member.
 
 ## Next Steps
 
