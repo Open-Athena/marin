@@ -21,13 +21,15 @@ This directory contains migration scripts and notes for the [uv workspace migrat
 - [`step-2-sync.sh`](#step-2-syncsh) ([📄](#file-step-2-sync-sh)) - Sync Levanter updates from upstream
 - [`step-2.sh`](#step-2sh) ([📄](#file-step-2-sh)) - Main Step 2 migration script
 
-## Migration Script
+## Step 1: marin + data_browser workspace
+
+### Migration Script
 
 Run `./workspace-migration/step-1.sh [REFERENCE_BRANCH]` from the repo root to replay the workspace restructuring on a clean branch.
 
 The script accepts an optional "reference branch" argument, which it can copy from (for files whose content is essentially new in "step 1", not a modification of existing files). If not provided, it will fall back to `rw/ws` on a `marin-community/marin` remote.
 
-## Files Updated by Script
+### Files Updated by Script
 
 The migration script automatically handles all path updates:
 
@@ -40,11 +42,11 @@ The migration script automatically handles all path updates:
 7. **`CLAUDE.md`** - Create from reference branch
 8. **Documentation files** - Update GitHub URLs from `/blob/main/src/marin/` → `/blob/<doc-branch>/lib/marin/src/marin/` (uses `MARIN_DOC_BRANCH` env var, defaults to `main`)
 
-## Testing the Migration
+### Testing the Migration
 
 Run `./workspace-migration/step-1-test.sh` to verify the migration is reproducible. This creates an ephemeral test branch from the parent commit, replays the migration, and compares the resulting tree. On success, it cleans up and returns to the original branch.
 
-### Not Impacted
+#### Not Impacted
 
 The following do NOT need updates because they work with the new structure:
 
@@ -53,7 +55,7 @@ The following do NOT need updates because they work with the new structure:
 - **Tests** - Import `marin` as a package, which works with the workspace setup
 - **Experiments** - Import `from marin.X`, which works because the workspace root depends on the `marin` member
 
-## Testing Checklist
+### Testing Checklist
 
 After migration:
 
@@ -65,7 +67,7 @@ After migration:
 - [ ] Docker builds work (test locally if possible)
 - [ ] Experiments can still import from `marin` package
 
-## Result
+### Result
 
 After this step, the structure is:
 
@@ -140,6 +142,5 @@ Main Step 2 migration script for adding Levanter as a workspace member.
 ## Next Steps
 
 See the [uv workspace migration plan](https://github.com/marin-community/marin/blob/ws/CLAUDE.md#repo-reorg) for the complete roadmap:
-- **Step 2**: Add Levanter as a workspace member
 - **Step 3**: Add Haliax as a workspace member
 - **Step Omega**: Further split into `marin-core`, `marin-crawl`, `ray_tpu`, `rl`, `thalas` packages
