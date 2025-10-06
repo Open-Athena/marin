@@ -80,23 +80,23 @@ cp pyproject.toml tmp/pyproject.toml.migration-backup
 
 # Create new workspace root pyproject.toml by applying patch
 echo "Creating workspace root pyproject.toml..."
-if [ ! -f "$SCRIPT_DIR/pyproject-root.patch" ]; then
-    echo "ERROR: Could not find pyproject-root.patch in workspace-migration/"
+if [ ! -f "$SCRIPT_DIR/step-1-pyproject-root.patch" ]; then
+    echo "ERROR: Could not find step-1-pyproject-root.patch in workspace-migration/"
     exit 1
 fi
-patch -p0 < "$SCRIPT_DIR/pyproject-root.patch" || {
-    echo "ERROR: Failed to apply pyproject-root.patch"
+patch -p0 < "$SCRIPT_DIR/step-1-pyproject-root.patch" || {
+    echo "ERROR: Failed to apply step-1-pyproject-root.patch"
     exit 1
 }
 
 # Create lib/marin/pyproject.toml by applying patch
 echo "Creating lib/marin/pyproject.toml..."
-if [ ! -f "$SCRIPT_DIR/pyproject-lib-marin.patch" ]; then
-    echo "ERROR: Could not find pyproject-lib-marin.patch in workspace-migration/"
+if [ ! -f "$SCRIPT_DIR/step-1-pyproject-lib-marin.patch" ]; then
+    echo "ERROR: Could not find step-1-pyproject-lib-marin.patch in workspace-migration/"
     exit 1
 fi
-patch -p0 < "$SCRIPT_DIR/pyproject-lib-marin.patch" || {
-    echo "ERROR: Failed to apply pyproject-lib-marin.patch"
+patch -p0 < "$SCRIPT_DIR/step-1-pyproject-lib-marin.patch" || {
+    echo "ERROR: Failed to apply step-1-pyproject-lib-marin.patch"
     exit 1
 }
 
@@ -137,7 +137,7 @@ sed_inplace "s|/blob/main/src/marin/|/blob/$DOC_BRANCH_ENCODED/lib/marin/src/mar
 git diff "$PARENT_COMMIT" "$REFERENCE_BRANCH" -- .github/workflows/unit-tests.yaml .github/workflows/docs.yaml | git apply -p0
 
 # Apply ray_deps.py CI fix
-patch -p0 < "$SCRIPT_DIR/ray_deps.patch"
+patch -p0 < "$SCRIPT_DIR/step-1-ray_deps.patch"
 
 # Update uv.lock for workspace structure (preserves existing pins)
 echo "Updating uv.lock for workspace structure..."

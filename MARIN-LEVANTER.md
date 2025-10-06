@@ -4,16 +4,20 @@ This directory contains the migration script and notes for **Step 1** of the uv 
 
 ## Contents <a id="toc"></a>
 
-- [`step-1.sh`](#step-1sh) ([📄](#file-step-1-sh)) - Main migration script for workspace initialization
-- [`test-step-1.sh`](#test-step-1sh) ([📄](#file-test-step-1-sh)) - Test script to verify migration reproducibility
-- [`pyproject-root.patch`](#pyproject-rootpatch) ([📄](#file-pyproject-root-patch)) - Patch to transform root pyproject.toml to workspace root
-- [`pyproject-lib-marin.patch`](#pyproject-lib-marinpatch) ([📄](#file-pyproject-lib-marin-patch)) - Patch to create lib/marin/pyproject.toml
-- [`ray_deps.patch`](#ray_depspatch) ([📄](#file-ray_deps-patch)) - Patch to fix ray_deps.py for workspace structure
-- [`resolve-conflicts.sh`](#resolve-conflictssh) ([📄](#file-resolve-conflicts-sh)) - Helper for resolving merge conflicts during migration
+**Step 1: marin + data_browser workspace**
+
+- [`step-1.sh`](#step-1sh) ([📄](#file-step-1-sh)) - Main migration script
+- [`step-1-test.sh`](#step-1-testsh) ([📄](#file-step-1-test-sh)) - Test script to verify reproducibility
+- [`step-1-pyproject-root.patch`](#step-1-pyproject-rootpatch) ([📄](#file-step-1-pyproject-root-patch)) - Transform root pyproject.toml to workspace root
+- [`step-1-pyproject-lib-marin.patch`](#step-1-pyproject-lib-marinpatch) ([📄](#file-step-1-pyproject-lib-marin-patch)) - Create lib/marin/pyproject.toml
+- [`step-1-ray_deps.patch`](#step-1-ray_depspatch) ([📄](#file-step-1-ray_deps-patch)) - Fix ray_deps.py for workspace structure
+- [`step-1-resolve-conflicts.sh`](#step-1-resolve-conflictssh) ([📄](#file-step-1-resolve-conflicts-sh)) - Resolve merge conflicts during migration
+
+**Step 2: Levanter integration**
+
 - [`step-2-init.sh`](#step-2-initsh) ([📄](#file-step-2-init-sh)) - Initialize Levanter as workspace member
 - [`step-2-sync.sh`](#step-2-syncsh) ([📄](#file-step-2-sync-sh)) - Sync Levanter updates from upstream
 - [`step-2.sh`](#step-2sh) ([📄](#file-step-2-sh)) - Main Step 2 migration script
-- [`MARIN-LEVANTER.md`](#marin-levantermd) ([📄](#file-marin-levanter-md)) - This file
 
 ## Migration Script
 
@@ -36,7 +40,7 @@ The migration script automatically handles all path updates:
 
 ## Testing the Migration
 
-Run `./workspace-migration/test-step-1.sh` to verify the migration is reproducible. This creates an ephemeral test branch from the parent commit, replays the migration, and compares the resulting tree. On success, it cleans up and returns to the original branch.
+Run `./workspace-migration/step-1-test.sh` to verify the migration is reproducible. This creates an ephemeral test branch from the parent commit, replays the migration, and compares the resulting tree. On success, it cleans up and returns to the original branch.
 
 ### Not Impacted
 
@@ -87,7 +91,7 @@ Main migration script that:
 4. Runs `uv sync` to update lockfile for workspace structure (preserving package versions)
 5. Commits the migration
 
-### test-step-1.sh [📄](#file-test-step-1-sh) <a id="test-step-1sh"></a>
+### step-1-test.sh [📄](#file-step-1-test-sh) <a id="step-1-testsh"></a>
 
 Test harness that verifies step-1.sh is reproducible:
 1. Creates ephemeral test branch from parent commit
@@ -95,27 +99,27 @@ Test harness that verifies step-1.sh is reproducible:
 3. Compares resulting git tree hash with original migration commit
 4. Cleans up on success or leaves test branch for inspection on failure
 
-### pyproject-root.patch [📄](#file-pyproject-root-patch) <a id="pyproject-rootpatch"></a>
+### step-1-pyproject-root.patch [📄](#file-step-1-pyproject-root-patch) <a id="step-1-pyproject-rootpatch"></a>
 
 Transforms root `pyproject.toml` from package config to workspace root config. Key changes:
 - Adds `[tool.uv.workspace]` with `members = ["lib/*"]`
 - Preserves dependencies as workspace root dependencies
 - Updates package name to `marin-root`
 
-### pyproject-lib-marin.patch [📄](#file-pyproject-lib-marin-patch) <a id="pyproject-lib-marinpatch"></a>
+### step-1-pyproject-lib-marin.patch [📄](#file-step-1-pyproject-lib-marin-patch) <a id="step-1-pyproject-lib-marinpatch"></a>
 
 Creates `lib/marin/pyproject.toml` from original root pyproject.toml. Key changes:
 - Keeps `marin` as package name
 - Moves package-specific dependencies and extras
 - Updates paths for new structure
 
-### ray_deps.patch [📄](#file-ray_deps-patch) <a id="ray_depspatch"></a>
+### step-1-ray_deps.patch [📄](#file-step-1-ray_deps-patch) <a id="step-1-ray_depspatch"></a>
 
 Fixes `lib/marin/src/marin/run/ray_deps.py` to work with workspace structure:
 - Adds `--package marin` flag to `uv export` command
 - Required because workspace root contains multiple packages and uv needs to know which package's extras to use
 
-### resolve-conflicts.sh [📄](#file-resolve-conflicts-sh) <a id="resolve-conflictssh"></a>
+### step-1-resolve-conflicts.sh [📄](#file-step-1-resolve-conflicts-sh) <a id="step-1-resolve-conflictssh"></a>
 
 Helper script for resolving merge conflicts during migration replays. Used when applying migration on branches that have diverged from main.
 
