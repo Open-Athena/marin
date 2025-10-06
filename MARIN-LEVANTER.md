@@ -1,7 +1,7 @@
 # Marin + Levanter Workspace Migration
 
-This directory contains migration scripts and notes for the [uv workspace migration plan](https://github.com/marin-community/marin/blob/rw%2Fws/CLAUDE.md#repo-reorg) (documented in `CLAUDE.md`):
-- **Step 1**: Initialize workspace and fold `marin` and `data_browser` into `lib/` ([PR #1690](https://github.com/marin-community/marin/pull/1690))
+This directory contains migration scripts and notes for the [uv workspace migration plan][migration-plan]:
+- **Step 1**: Initialize workspace and fold `marin` and `data_browser` into `lib/` ([PR #1690][pr-1690])
 - **Step 2**: Add Levanter as a workspace member
 
 ## Contents <a id="toc"></a>
@@ -141,6 +141,9 @@ Main Step 2 migration script for adding Levanter as a workspace member.
 
 ## Next Steps
 
-See the [uv workspace migration plan](https://github.com/marin-community/marin/blob/ws/CLAUDE.md#repo-reorg) for the complete roadmap:
+See the [uv workspace migration plan][migration-plan] for the complete roadmap:
 - **Step 3**: Add Haliax as a workspace member
 - **Step Omega**: Further split into `marin-core`, `marin-crawl`, `ray_tpu`, `rl`, `thalas` packages
+
+[migration-plan]: https://github.com/marin-community/marin/blob/rw%2Fws/CLAUDE.md#repo-reorg
+[pr-1690]: https://github.com/marin-community/marin/pull/1690
