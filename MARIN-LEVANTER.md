@@ -1,6 +1,8 @@
-# Workspace Migration - Step 1
+# Marin + Levanter Workspace Migration
 
-This directory contains the migration script and notes for **Step 1** of the uv workspace migration plan: initializing the workspace and folding `marin` and `data_browser` members into `lib/`.
+This directory contains migration scripts and notes for the uv workspace migration plan:
+- **Step 1**: Initialize workspace and fold `marin` and `data_browser` into `lib/`
+- **Step 2**: Add Levanter as a workspace member
 
 ## Contents <a id="toc"></a>
 
