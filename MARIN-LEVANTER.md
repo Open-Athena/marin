@@ -1,7 +1,7 @@
 # Marin + Levanter Workspace Migration
 
-This directory contains migration scripts and notes for the uv workspace migration plan:
-- **Step 1**: Initialize workspace and fold `marin` and `data_browser` into `lib/`
+This directory contains migration scripts and notes for the [uv workspace migration plan](https://github.com/marin-community/marin/blob/rw%2Fws/CLAUDE.md#repo-reorg) (documented in `CLAUDE.md`):
+- **Step 1**: Initialize workspace and fold `marin` and `data_browser` into `lib/` ([PR #1690](https://github.com/marin-community/marin/pull/1690))
 - **Step 2**: Add Levanter as a workspace member
 
 ## Contents <a id="toc"></a>
