@@ -1,18 +1,36 @@
 #!/usr/bin/env bash
 # Workspace Migration - Step 2
 #
-# Merges Levanter (with preserved Git history) into workspace as lib/levanter/
-# Run from repo root: ./workspace-migration/step-2.sh
+# Hermetic script that merges Levanter (with preserved Git history) into workspace as lib/levanter/
+# Run from repo root: ./workspace-migration/step-2.sh [levanter-repo-path] [levanter-ref]
 #
 # Prerequisites:
-#   - Run step-2-init.sh first to create levanter-pkg branch
 #   - Should be on ws branch (or branch with step 1 applied)
+#   - Levanter repo cloned (default: ../levanter)
+#
+# Arguments:
+#   levanter-repo-path: Path to Levanter repo (default: ../levanter)
+#   levanter-ref: Git ref to use (default: main)
 
 set -e
 
 # Change to repo root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
+
+# Levanter repo path (default to sibling directory)
+LEVANTER_REPO="${1:-../levanter}"
+# Levanter ref to use (default to main)
+LEVANTER_REF="${2:-main}"
+
+# Helper function for cross-platform sed in-place editing
+sed_inplace() {
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i '' "$@"
+    else
+        sed -i "$@"
+    fi
+}
 
 echo "Workspace Migration - Step 2"
 echo "Merging Levanter with preserved Git history into lib/levanter/"
@@ -24,16 +42,11 @@ if [ ! -d "lib/marin" ]; then
     exit 1
 fi
 
-# Verify levanter-pkg branch exists
-if ! git rev-parse --verify levanter-pkg >/dev/null 2>&1; then
-    echo "ERROR: levanter-pkg branch not found"
-    echo "Run step-2-init.sh first to create it"
+# Verify levanter repo exists
+if [ ! -d "$LEVANTER_REPO/.git" ]; then
+    echo "ERROR: Levanter repository not found at $LEVANTER_REPO"
     exit 1
 fi
-
-# Get current branch name
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-echo "Current branch: $CURRENT_BRANCH"
 
 # Verify lib/levanter doesn't already exist
 if [ -d "lib/levanter" ]; then
@@ -41,16 +54,133 @@ if [ -d "lib/levanter" ]; then
     exit 1
 fi
 
+# Get current branch name
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+echo "Current branch: $CURRENT_BRANCH"
+echo ""
+
+#
+# Part 1: Initialize levanter-pkg branch
+#
+
+echo "=== Part 1: Preparing levanter-pkg branch ==="
+echo ""
+
+# Add levanter as remote if not already present
+if ! git remote | grep -q "^levanter$"; then
+    echo "Adding levanter as remote..."
+    git remote add levanter "$LEVANTER_REPO"
+fi
+
+# Fetch levanter
+echo "Fetching levanter..."
+git fetch levanter
+
+# Resolve levanter ref to a commit SHA
+if git rev-parse "levanter/$LEVANTER_REF" >/dev/null 2>&1; then
+    LEVANTER_COMMIT=$(git rev-parse "levanter/$LEVANTER_REF")
+elif git rev-parse "$LEVANTER_REF" >/dev/null 2>&1; then
+    LEVANTER_COMMIT=$(git rev-parse "$LEVANTER_REF")
+else
+    echo "ERROR: Could not resolve Levanter ref: $LEVANTER_REF"
+    exit 1
+fi
+
+echo "Using Levanter commit: $LEVANTER_COMMIT (from $LEVANTER_REF)"
+echo ""
+
+# Delete levanter-pkg branch if it exists
+if git rev-parse --verify levanter-pkg >/dev/null 2>&1; then
+    echo "Deleting existing levanter-pkg branch..."
+    git branch -D levanter-pkg
+fi
+
+# Create levanter-pkg branch from specified commit
+echo "Creating levanter-pkg branch from $LEVANTER_COMMIT..."
+git checkout -b levanter-pkg "$LEVANTER_COMMIT"
+
+# Get list of all files at root (excluding .github)
+FILES=$(git ls-tree --name-only HEAD | grep -v "^\.github$")
+
+# Create lib/levanter/ directory
+mkdir -p lib/levanter
+
+# Move all files to lib/levanter/ (excluding .github)
+echo "Moving files to lib/levanter/ (excluding .github/)..."
+for file in $FILES; do
+    if [ "$file" != "lib" ]; then
+        git mv "$file" "lib/levanter/"
+    fi
+done
+
+# Update workspace configuration in levanter-pkg branch
+echo "Creating root pyproject.toml for levanter-pkg branch..."
+
+# Create minimal root pyproject.toml for levanter-pkg branch
+cat > pyproject.toml << 'EOF'
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "levanter-pkg"
+version = "0.1.0"
+description = "Levanter workspace member"
+requires-python = ">=3.11"
+
+[tool.uv.workspace]
+members = ["lib/levanter"]
+
+[tool.uv.sources]
+levanter = { workspace = true }
+EOF
+
+git add pyproject.toml
+
+# Commit the restructuring
+echo "Committing restructuring..."
+git commit -m "Move Levanter to lib/levanter/ for workspace integration
+
+Restructure Levanter repository for integration as workspace member.
+All files moved to lib/levanter/ subdirectory (excluding .github/).
+
+This branch preserves full Levanter Git history and will be merged
+into the main Marin workspace migration."
+
+echo ""
+echo "✓ levanter-pkg branch created from Levanter commit $LEVANTER_COMMIT"
+echo ""
+
+#
+# Part 2: Merge levanter-pkg into workspace
+#
+
+echo "=== Part 2: Merging levanter-pkg into $CURRENT_BRANCH ==="
+echo ""
+
+# Return to original branch
+git checkout "$CURRENT_BRANCH"
+
 # Merge levanter-pkg branch
 echo "Merging levanter-pkg branch..."
 git merge levanter-pkg --allow-unrelated-histories --no-commit || {
     echo "Merge has conflicts, resolving..."
 
     # Handle pyproject.toml conflict (use ours, which is the workspace root)
-    if git diff --name-only --diff-filter=U | grep -q "pyproject.toml"; then
+    if git diff --name-only --diff-filter=U | grep -q "^pyproject.toml$"; then
         echo "Resolving pyproject.toml conflict (keeping workspace root version)..."
         git checkout --ours pyproject.toml
         git add pyproject.toml
+    fi
+
+    # Handle .github conflicts (we'll handle workflows separately after merge)
+    if git diff --name-only --diff-filter=U | grep -q "^\.github/"; then
+        echo "Resolving .github conflicts..."
+        # Take theirs for .github (Levanter's workflows)
+        git diff --name-only --diff-filter=U | grep "^\.github/" | while read file; do
+            git checkout --theirs "$file"
+            git add "$file"
+        done
     fi
 
     # Check if all conflicts are resolved
@@ -62,6 +192,33 @@ git merge levanter-pkg --allow-unrelated-histories --no-commit || {
     fi
 }
 
+# Update workspace root pyproject.toml to include levanter
+echo "Updating workspace configuration..."
+
+# Add levanter to workspace members
+if ! grep -q '"lib/levanter"' pyproject.toml; then
+    sed_inplace '/^members = \[/,/^\]/ s/\("lib\/data_browser",\)/\1\n    "lib\/levanter",/' pyproject.toml
+fi
+
+# Add levanter to workspace sources
+if ! grep -q 'levanter = { workspace = true }' pyproject.toml; then
+    sed_inplace '/marin = { workspace = true }/a\
+levanter = { workspace = true }
+' pyproject.toml
+fi
+
+# Update marin's dependency on levanter to use workspace
+echo "Updating marin to use workspace levanter..."
+sed_inplace 's|"levanter\[serve\] @ git+https://github.com/marin-community/levanter.git"|"levanter[serve]"|' lib/marin/pyproject.toml
+
+# Update uv.lock for new workspace structure
+echo "Updating uv.lock for workspace structure..."
+uv sync
+
+# Stage all changes
+echo "Staging changes..."
+git add pyproject.toml lib/marin/pyproject.toml uv.lock
+
 # Commit the merge
 git commit -m "Merge Levanter into lib/levanter/
 
@@ -72,52 +229,78 @@ Levanter files are now in lib/levanter/ subdirectory.
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
 
-# Update workspace root pyproject.toml to include levanter
-echo "Updating workspace configuration..."
+echo ""
+echo "✓ Merge complete!"
+echo ""
 
-# Add levanter to workspace members
-if ! grep -q '"lib/levanter"' pyproject.toml; then
-    # Use sed to add levanter to workspace members
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' '/^members = \[/,/^\]/ s/\("lib\/data_browser",\)/\1\n    "lib\/levanter",/' pyproject.toml
-    else
-        sed -i '/^members = \[/,/^\]/ s/\("lib\/data_browser",\)/\1\n    "lib\/levanter",/' pyproject.toml
+#
+# Part 3: Migrate GitHub Actions workflows
+#
+
+echo "=== Part 3: Migrating GitHub Actions workflows ==="
+echo ""
+
+# Rename Levanter workflows with levanter- prefix
+echo "Renaming Levanter workflows with levanter- prefix..."
+for workflow in .github/workflows/*.yaml .github/workflows/*.yml; do
+    if [ -f "$workflow" ]; then
+        basename=$(basename "$workflow")
+        # Skip if already has levanter- prefix or is a Marin workflow
+        if [[ ! "$basename" =~ ^levanter- ]]; then
+            # This is a Levanter workflow, rename it
+            new_name="levanter-${basename}"
+            git mv "$workflow" ".github/workflows/$new_name"
+            echo "  $basename -> $new_name"
+        fi
     fi
+done
+
+# Move dependabot.yml if it exists
+if [ -f ".github/dependabot.yml" ]; then
+    echo "Renaming dependabot.yml with levanter- prefix..."
+    git mv .github/dependabot.yml .github/levanter-dependabot.yml
 fi
 
-# Add levanter to workspace sources
-if ! grep -q 'levanter = { workspace = true }' pyproject.toml; then
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        sed -i '' '/marin = { workspace = true }/a\
-levanter = { workspace = true }
-' pyproject.toml
-    else
-        sed -i '/marin = { workspace = true }/a levanter = { workspace = true }' pyproject.toml
-    fi
+# Apply workflow content patches
+echo "Applying workflow content updates..."
+
+# Apply step-2-workflows.patch if it exists
+if [ -f "$SCRIPT_DIR/step-2-workflows.patch" ]; then
+    echo "Applying step-2-workflows.patch..."
+    git apply "$SCRIPT_DIR/step-2-workflows.patch" || {
+        echo "WARNING: Patch failed to apply cleanly"
+        echo "You may need to manually update workflows for workspace structure"
+    }
 fi
 
-# Update marin's dependency on levanter to use workspace
-echo "Updating marin to use workspace levanter..."
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    sed -i '' 's|"levanter\[serve\] @ git+https://github.com/marin-community/levanter.git"|"levanter[serve]"|' lib/marin/pyproject.toml
-else
-    sed -i 's|"levanter\[serve\] @ git+https://github.com/marin-community/levanter.git"|"levanter[serve]"|' lib/marin/pyproject.toml
-fi
+# Commit workflow changes
+git add .github/
 
-# Update uv.lock for new workspace structure
-echo "Updating uv.lock for workspace structure..."
-uv sync
+git commit -m "Migrate Levanter workflows to monorepo structure
 
-# Stage all changes
-echo "Staging changes..."
-git add pyproject.toml lib/marin/pyproject.toml uv.lock
+- Rename workflows with levanter- prefix to avoid conflicts
+- Update workflows for uv workspace structure:
+  - Add path filters to trigger only on relevant changes
+  - Set working-directory: lib/levanter
+  - Use --package levanter for uv commands
 
-# Amend the merge commit with workspace configuration updates
-echo "Amending merge commit with workspace configuration..."
-git commit --amend --no-edit
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
 
 echo ""
+echo "✓ Workflow migration complete!"
+echo ""
+
+#
+# Done!
+#
+
+echo "========================================="
 echo "✓ Step 2 complete!"
+echo "========================================="
 echo ""
 echo "Levanter has been merged into lib/levanter/ with full Git history preserved."
-echo "Next: Create step-2-sync.sh for syncing upstream Levanter changes."
+echo "GitHub Actions workflows have been migrated to monorepo structure."
+echo ""
+echo "Next: Test the integration and create PR for step 2"

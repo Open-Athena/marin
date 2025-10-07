@@ -1,0 +1,92 @@
+diff --git a/.github/workflows/levanter-run_pre_commit.yaml b/.github/workflows/levanter-run_pre_commit.yaml
+index PLACEHOLDER..PLACEHOLDER 100644
+--- a/.github/workflows/levanter-run_pre_commit.yaml
++++ b/.github/workflows/levanter-run_pre_commit.yaml
+@@ -1,13 +1,21 @@
+-name: Pre-Commit
++name: Levanter - Pre-Commit
+
+-on: [push, pull_request]
++on:
++  push:
++    branches:
++      - main
++    paths:
++      - 'lib/levanter/**'
++      - '.github/workflows/levanter-run_pre_commit.yaml'
++  pull_request:
++    paths:
++      - 'lib/levanter/**'
++      - '.github/workflows/levanter-run_pre_commit.yaml'
+
+ jobs:
+   pre_commit:
+     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+
+     runs-on: ubuntu-latest
++    defaults:
++      run:
++        working-directory: lib/levanter
+     strategy:
+       matrix:
+@@ -21,10 +29,12 @@ jobs:
+         with:
+           version: "0.7.20"
+           python-version: ${{ matrix.python-version }}
+           enable-cache: true
++          working-directory: lib/levanter
+       - name: Set up Python
+         run: uv python install
+       - name: "Run Pre-commit"
+-        run: uv run pre-commit run --all-files --show-diff-on-failure
++        run: uv run --package levanter pre-commit run --all-files --show-diff-on-failure
+
+
+diff --git a/.github/workflows/levanter-run_tests.yaml b/.github/workflows/levanter-run_tests.yaml
+index PLACEHOLDER..PLACEHOLDER 100644
+--- a/.github/workflows/levanter-run_tests.yaml
++++ b/.github/workflows/levanter-run_tests.yaml
+@@ -1,7 +1,19 @@
+-name: Run tests
++name: Levanter - Run tests
+
+-on: [push, pull_request]
++on:
++  push:
++    branches:
++      - main
++    paths:
++      - 'lib/levanter/**'
++      - 'uv.lock'
++      - '.github/workflows/levanter-run_tests.yaml'
++  pull_request:
++    paths:
++      - 'lib/levanter/**'
++      - 'uv.lock'
++      - '.github/workflows/levanter-run_tests.yaml'
+
+ jobs:
+   unit_tests:
+     if: github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+
+     runs-on: ubuntu-latest
++    defaults:
++      run:
++        working-directory: lib/levanter
+     strategy:
+       matrix:
+@@ -16,11 +28,13 @@ jobs:
+         with:
+           version: "0.7.20"
+           python-version: ${{ matrix.python-version }}
+           enable-cache: true
++          working-directory: lib/levanter
+       - name: Set up Python
+         run: uv python install
+       - name: Install dependencies
+-        run: uv sync --dev
++        run: uv sync --package levanter --dev
+       - name: Test with pytest
+         run: |
+           # check we are using the right jax version
+           PYTHONPATH=tests:src:. uv run --with "jax[cpu]==${{ matrix.jax-version }}" pytest tests -m "not entry and not slow and not ray" --durations=20
