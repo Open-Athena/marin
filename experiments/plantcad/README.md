@@ -12,7 +12,6 @@ Original tutorial: https://gist.github.com/eric-czech/31e5b79689d322f7becb94a109
 git clone https://github.com/marin-community/marin.git
 cd marin
 uv venv --python 3.11
-uv sync
 ```
 
 ### Remote (SkyPilot)
@@ -29,7 +28,7 @@ envs:
 workdir: .
 setup: |
   uv venv --python 3.11
-  uv sync --extra=cuda12
+  uv sync --extra=cuda12 --extra=dna
   for var in HUGGING_FACE_HUB_TOKEN WANDB_API_KEY; do
     declare -n ref=$var
     grep -q "^export $var=" ~/.bashrc || echo "export $var=$ref" >> ~/.bashrc

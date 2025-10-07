@@ -12,10 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
+import numpy as np
 import pytest
 import jax
 import jax.numpy as jnp
 import haliax as hax
+from datasets import load_dataset
+from huggingface_hub import snapshot_download
+from levanter.models.llama import LlamaConfig
+from levanter.utils.jax_utils import use_cpu_device
+from transformers import PretrainedConfig as HfConfig, AutoTokenizer
 from experiments.plantcad.evaluation import (
     create_alternate_sequences,
     compute_sequence_logprob,
@@ -275,6 +282,68 @@ def test_compute_causal_conservation():
             nucleotide_positions=setup["nucleotide_positions"],
             nucleotide_token_ids=setup["nucleotide_token_ids"],
         )
+
+
+def test_compute_causal_conservation_accuracy():
+    """End-to-end parity test against reference scores.
+
+    Reference scores come from https://github.com/Open-Athena/biofoundation/commit/23f6745defdd54cac09b43c066f249789bf74d56
+    """
+    # Download model and dataset
+    data_path = snapshot_download(
+        repo_id="plantcad/ci",
+        repo_type="dataset",
+        allow_patterns="unit_tests/evolutionary_constraint/ref_logprob_clm_sim/*",
+    )
+    ds = load_dataset("plantcad/ci", name="ut_ec_ref_logprob_clm_sim", split="train")
+    model_dir = os.path.join(data_path, "unit_tests/evolutionary_constraint/ref_logprob_clm_sim/model")
+
+    # Load tokenizer and config
+    hf_config = HfConfig.from_pretrained(model_dir)
+    config = LlamaConfig.from_hf_config(hf_config)
+    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+
+    # Load sequences and positions
+    sequences = ds["seq"] if "seq" in ds.column_names else ds["sequence"]
+    positions = np.asarray(ds["pos"], dtype=np.int32)
+    tokens_np = np.asarray([tokenizer(s, add_special_tokens=False)["input_ids"] for s in sequences], dtype=np.int32)
+    tokens = hax.named(jnp.array(tokens_np), ("batch", "position"))
+    nucleotide_positions = hax.named(jnp.array(positions), ("batch",))
+    nucleotide_token_ids = [int(tokenizer.convert_tokens_to_ids(nt)) for nt in "ACGT"]
+
+    # Load model
+    converter = config.hf_checkpoint_converter().replaced(reference_checkpoint=model_dir, tokenizer=tokenizer)
+    with use_cpu_device():
+        model = converter.load_pretrained(
+            config.model_type,
+            ref=model_dir,
+            resize_vocab_to_match_tokenizer=False,
+            dtype=jnp.float32,
+        )
+
+    def logit_fn(x):
+        return model(x)
+
+    # Compute conservation scores
+    actual = compute_causal_conservation(
+        tokens=tokens,
+        logit_function=logit_fn,
+        nucleotide_positions=nucleotide_positions,
+        nucleotide_token_ids=nucleotide_token_ids,
+    )
+
+    # Compare with expected scores
+    expected = np.asarray(ds["score"], dtype=np.float32)
+    our_scores_np = np.asarray(actual.array, dtype=np.float32)
+
+    assert len(our_scores_np) == len(expected) == 8
+    assert jnp.all(jnp.isfinite(actual.array))
+    assert np.all(np.isfinite(expected))
+
+    # Order parity
+    assert np.array_equal(np.argsort(-expected), np.argsort(-our_scores_np))
+    # Value parity within tolerance
+    np.testing.assert_allclose(our_scores_np, expected, rtol=1e-3, atol=1e-3)
 
 
 def _assert_batch_variants(alt_array, batch_idx, expected_variants, seq_length, batch_name):

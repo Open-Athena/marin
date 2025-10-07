@@ -25,7 +25,7 @@ dependencies = [
     "jax==0.6.2",
     "haliax>=1.4.dev381",
     #"levanter[serve]@git+https://github.com/marin-community/levanter.git",
-    "levanter[serve]@git+https://github.com/eric-czech/levanter.git",
+    "levanter[serve]@git+https://github.com/eric-czech/levanter.git@95fbbf9d3110d8c0cd979fbc19427ef3b9d9d5f6",
     "lz4",
     "multiprocess==0.70.16",
     "numpy",

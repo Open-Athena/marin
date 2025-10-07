@@ -16,11 +16,13 @@
 """PlantCAD evaluation plugin for Levanter training."""
 
 import logging
-from typing import Any
 from collections.abc import Callable
 
 from levanter.eval import EvalPlugin
 from levanter.callbacks import StepInfo
+from levanter.utils.hf_utils import HfTokenizer
+from jax.sharding import Mesh
+from haliax.partitioning import ResourceMapping
 from experiments.plantcad.evaluation import DnaEvalBaseConfig, create_dna_eval_callback
 
 logger = logging.getLogger("ray")
@@ -29,11 +31,39 @@ logger = logging.getLogger("ray")
 class PlantCADEvaluationPlugin(EvalPlugin):
     """PlantCAD DNA conservation evaluation plugin for Levanter."""
 
-    def __init__(self, config: dict[str, Any]):
-        # Store the dict config directly
-        self.config = DnaEvalBaseConfig(**config)
-        logger.info(f"Initialized PlantCAD evaluation plugin with config: {self.config}")
+    def __init__(self):
+        logger.info("Initialized PlantCAD evaluation plugin")
 
-    def create_callback(self, **kwargs) -> Callable[[StepInfo], None]:
-        """Create DNA conservation evaluation callback."""
-        return create_dna_eval_callback(self.config)
+    def create_callback(
+        self,
+        *,
+        tokenizer: HfTokenizer,
+        device_mesh: Mesh,
+        compute_axis_mapping: ResourceMapping,
+        parameter_axis_mapping: ResourceMapping,
+        batch_size: int,
+    ) -> Callable[[StepInfo], None]:
+        """Create DNA conservation evaluation callback.
+
+        Args:
+            tokenizer: Tokenizer for the model
+            device_mesh: JAX device mesh for distributed computation
+            compute_axis_mapping: Axis mapping for computation
+            parameter_axis_mapping: Axis mapping for parameter storage
+            batch_size: Evaluation batch size
+
+        Returns:
+            Callback function for DNA conservation evaluation
+        """
+        # Cut batch size in half because current eval runs with
+        # model in full precision rather than bf16
+        # TODO: implement mixed-precision in eval
+        config = DnaEvalBaseConfig(batch_size=batch_size // 2)
+        logger.info(f"Creating conservation evaluation callback with config: {config}")
+        return create_dna_eval_callback(
+            config=config,
+            tokenizer=tokenizer,
+            device_mesh=device_mesh,
+            compute_axis_mapping=compute_axis_mapping,
+            parameter_axis_mapping=parameter_axis_mapping,
+        )

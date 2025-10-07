@@ -39,8 +39,11 @@ from transformers import AutoModelForCausalLM
 from levanter.callbacks import StepInfo
 from marin.utilities.json_encoder import CustomJsonEncoder
 
-from experiments.plantcad.utils import get_available_gpus, get_nucleotide_token_ids, get_plantcad_tokenizer
+from experiments.plantcad.utils import get_available_gpus, get_nucleotide_token_ids
+from levanter.utils.hf_utils import HfTokenizer
 from marin.execution.executor import InputName, this_output_path, versioned
+from jax.sharding import Mesh
+from haliax.partitioning import ResourceMapping
 
 logger = logging.getLogger("ray")
 
@@ -48,9 +51,6 @@ logger = logging.getLogger("ray")
 @dataclass
 class DnaEvalBaseConfig:
     """Base configuration for DNA evaluation with fields needed for training callbacks"""
-
-    model_config: str
-    """Model configuration size (e.g., '300m', '100m', etc.)"""
 
     dataset_path: str = "plantcad/evolutionary-constraint-example"
     """Dataset repository path"""
@@ -292,12 +292,12 @@ def create_alternate_sequences(
     assert 0 <= ref_cts.max().item() <= 1
     if (invalid := ref_cts == 0).any().item():
         pos = nucleotide_positions[Batch, invalid]
-        tok = tokens_expanded[Batch, invalid, Position, pos]
+        tok = tokens_expanded[Batch, invalid][Position, pos]
         raise ValueError(
-            "Found invalid sequences in batch with OOV nucleotides at target positions; "
-            f"Target positions: {pos} "
-            f"Valid nucleotide token IDs: {nucleotide_token_ids} "
-            f"Invalid tokens: {tok} "
+            "Found invalid sequences in batch with OOV nucleotides at target positions;\n"
+            f"Target positions: {pos.array} \n"
+            f"Valid nucleotide token IDs: {nucleotide_token_ids} \n"
+            f"Invalid tokens: {tok.array} "
         )
     ref = hax.argmax(ref_mask, axis=Variant)
     assert ref.axes == (Batch,)
@@ -439,7 +439,7 @@ def score_eval_dataset(
         assert isinstance(pos, list)
 
         # Tokenize and convert to JAX arrays
-        tokenized = tokenizer(sequences, padding=True, truncation=True, max_length=512, return_tensors="np")
+        tokenized = tokenizer(sequences, padding=False, add_special_tokens=False, truncation=False, return_tensors="np")
         tokens = hax.named(tokenized["input_ids"], ("batch", "position"))
         nucleotide_positions = hax.named(pos, ("batch",))
 
@@ -473,12 +473,25 @@ def score_eval_dataset(
 # ------------------------------------------------------------------------------------------------
 
 
-def create_dna_eval_callback(config: DnaEvalBaseConfig) -> Callable[[StepInfo], None]:
-    """Create a training callback for DNA evaluation."""
+def create_dna_eval_callback(
+    config: DnaEvalBaseConfig,
+    tokenizer: HfTokenizer,
+    device_mesh: Mesh,
+    compute_axis_mapping: ResourceMapping,
+    parameter_axis_mapping: ResourceMapping,
+) -> Callable[[StepInfo], None]:
+    """Create a training callback for DNA evaluation.
 
-    # Load tokenizer
-    # TODO: fix this; how can the tokenizer be referenced during training without reloading?
-    tokenizer = get_plantcad_tokenizer()
+    Args:
+        config: DNA evaluation configuration
+        tokenizer: Tokenizer provided by Levanter's training loop
+        device_mesh: JAX device mesh for distributed computation
+        compute_axis_mapping: Axis mapping for computation (used during model inference)
+        parameter_axis_mapping: Axis mapping for parameter storage (used for model sharding)
+
+    Returns:
+        Callback function that evaluates DNA conservation at training steps
+    """
 
     # Load and validate dataset once when creating the callback
     dataset = load_eval_dataset(config)
@@ -488,7 +501,7 @@ def create_dna_eval_callback(config: DnaEvalBaseConfig) -> Callable[[StepInfo], 
         logger.debug(f"Running DNA conservation evaluation ({step=})")
         eval_model = step_info.eval_model
 
-        # Create logit function for Levanter model
+        # Create logit function for Levanter model with proper axis mapping
         def logit_function(
             tokens: ht.Int[ht.NamedArray, "batch position"],
         ) -> ht.Float[ht.NamedArray, "batch position vocab"]:
@@ -501,7 +514,6 @@ def create_dna_eval_callback(config: DnaEvalBaseConfig) -> Callable[[StepInfo], 
             logit_function=logit_function,
             eval_dataset=dataset,
             batch_size=config.batch_size,
-            # TODO: make configurable or disable?
             log_progress=True,
         )
 
@@ -710,18 +722,12 @@ def run_conservation_eval(config: DnaEvalConfig) -> dict[str, float]:
 # Usage examples:
 
 # 1. Training callback (uses Levanter model from training state):
-# config = DnaEvalConfig(
-#     checkpoint_path="/path/to/checkpoint",  # Not used for callbacks
-#     model_config="300m",
-#     dataset_path="plantcad/evolutionary-constraint-example",
-#     dataset_config="10k"
-# )
-# trainer.add_hook(create_dna_eval_callback(config), every=1000)
+# The plugin system handles this automatically via PlantCADEvaluationPlugin
+# See plugin.py for implementation details
 
 # 2. Standalone evaluation with HuggingFace checkpoint:
 # config = DnaEvalConfig(
 #     checkpoint_path="/path/to/hf/checkpoint",
-#     model_config="300m",
 #     device="cuda",  # or "cpu" for CPU inference
 #     num_workers=None,  # defaults to number of GPUs
 #     dataset_path="plantcad/evolutionary-constraint-example",
