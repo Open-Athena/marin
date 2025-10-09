@@ -119,14 +119,18 @@ python -m experiments.plantcad.scripts.exp_pc1_train \
 rm -rf local_store/evaluation/dna-conservation*; python -m experiments.plantcad.scripts.exp_pc1_eval --prefix local_store --force_run_failed true
 
 # Checkpoint upload
-find local_store | grep -E 'hf/step-[0-9]+$' | xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v2_train {} {} --repo-type model" | bash /dev/stdin
-
+#   HF checkpoints
+find local_store | grep -E 'hf/step-[0-9]+$' | xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v3_train {} {} --repo-type model" | bash /dev/stdin
+#   Levanter checkpoints
 find local_store | grep -E 'checkpoints/step-[0-9]+$' | \
 grep -E 'step-26780$|step-24102|step-21424|step-18746$' | \
-xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v2_train {} {} --repo-type model" | \
+xargs -I {} echo "hf upload plantcad/_dev_marin_plantcad1_v3_train {} {} --repo-type model" | \
 bash /dev/stdin
 ```
 
+### Eval results
+
+Iteration 1:
 ```bash
 > python -m experiments.plantcad.misc.agg_eval_results
 roc_auc  step                                                                                                  checkpoint_path
@@ -145,7 +149,7 @@ roc_auc  step                                                                   
 0.593178 21749 hf://plantcad/_dev_marin_plantcad1_v1_train/local_store/checkpoints/plantcad-train-300m-r02-432442/hf/step-21749
 ```
 
-Second iteration:
+Iteration 2:
 
 ```
  python experiments/plantcad/misc/agg_eval_results.py
@@ -161,6 +165,24 @@ Second iteration:
 0.650973 24102 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-24102
 0.657882 26780 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-26780
 0.657452 26782 hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf/step-26782
+```
+
+Iteration 3:
+
+```
+> python -m experiments.plantcad.misc.agg_eval_results
+ roc_auc  step                                                                                                  checkpoint_path
+0.665902  2678  hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-2678
+0.672563  5356  hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-5356
+0.673937  8034  hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-8034
+0.675633 10712 hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-10712
+0.678089 13390 hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-13390
+0.684904 16068 hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-16068
+0.680056 18746 hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-18746
+0.677681 21424 hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-21424
+0.679077 24102 hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-24102
+0.681293 26780 hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-26780
+0.680195 26782 hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf/step-26782
 ```
 
 ## EDA

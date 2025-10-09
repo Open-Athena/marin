@@ -28,10 +28,8 @@ logger = logging.getLogger("ray")
 
 # Script parameters
 # TODO: Create task/config for multi-checkpoint evaluation
-checkpoint_dir = "hf://plantcad/_dev_marin_plantcad1_v2_train/local_store/checkpoints/plantcad-train-600m-r12-7ea0fc/hf"
-model_config: str = "600m"
-batch_size: int = 16  # biggest batch size that works for 600m + 40G A100
-max_samples: int | None = None
+checkpoint_dir = "hf://plantcad/_dev_marin_plantcad1_v3_train/local_store/checkpoints/plantcad-train-600m-r16-a1bc43/hf"
+batch_size: int = 32  # 16  # biggest batch size that works for 600m + 40G A100
 dtype: str | None = "bfloat16"
 checkpoint_steps: list[int] | None = None
 
@@ -47,9 +45,7 @@ for checkpoint in get_checkpoints(checkpoint_dir):
         fn=run_conservation_eval,
         config=DnaEvalConfig(
             checkpoint_path=versioned(path),
-            model_config=model_config,
             batch_size=batch_size,
-            max_samples=max_samples,
             dtype=dtype,
             output_dir=this_output_path(),
         ),
@@ -63,9 +59,7 @@ def main():
     logger.info("🧬 PlantCAD Model Evaluation")
     logger.info("=" * 60)
     logger.info(f"Checkpoint dir: {checkpoint_dir}")
-    logger.info(f"Model config: {model_config}")
     logger.info(f"Batch size: {batch_size}")
-    logger.info(f"Max samples: {max_samples}")
     logger.info("=" * 60)
     executor_main(steps=eval_steps)
 

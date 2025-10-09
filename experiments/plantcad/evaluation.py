@@ -52,7 +52,7 @@ logger = logging.getLogger("ray")
 class DnaEvalBaseConfig:
     """Base configuration for DNA evaluation with fields needed for training callbacks"""
 
-    dataset_path: str = "plantcad/evolutionary-constraint-example"
+    dataset_path: str = "plantcad/evolutionary-constraint"
     """Dataset repository path"""
 
     dataset_config: str | None = "10k"
@@ -730,7 +730,7 @@ def run_conservation_eval(config: DnaEvalConfig) -> dict[str, float]:
 #     checkpoint_path="/path/to/hf/checkpoint",
 #     device="cuda",  # or "cpu" for CPU inference
 #     num_workers=None,  # defaults to number of GPUs
-#     dataset_path="plantcad/evolutionary-constraint-example",
+#     dataset_path="plantcad/evolutionary-constraint",
 #     dataset_config="10k",
 #     max_samples=1000
 # )
