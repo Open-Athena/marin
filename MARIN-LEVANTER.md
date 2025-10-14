@@ -21,9 +21,11 @@ This directory contains migration scripts and notes for the [uv workspace migrat
     - [`step-1-resolve-conflicts.sh`](#step-1-resolve-conflictssh) ([📄](#file-step-1-resolve-conflicts-sh))
 - [Step 2 ✅: Levanter integration](#step-2)
   - [Files](#step-2-files)
-    - [`step-2-init.sh`](#step-2-initsh) ([📄](#file-step-2-init-sh))
-    - [`step-2-sync.sh`](#step-2-syncsh) ([📄](#file-step-2-sync-sh))
     - [`step-2.sh`](#step-2sh) ([📄](#file-step-2-sh))
+    - [`step-2-sync.sh`](#step-2-syncsh) ([📄](#file-step-2-sync-sh))
+    - [`step-2-test.sh`](#step-2-testsh) ([📄](#file-step-2-test-sh))
+    - [`step-2-workflows.patch`](#step-2-workflowspatch) ([📄](#file-step-2-workflows-patch))
+    - [`step-2-workflows-temp.patch`](#step-2-workflows-temppatch) ([📄](#file-step-2-workflows-temp-patch))
 - [Step 3 ✋: Haliax integration](#step-3)
 
 ## Step 1 ✅: marin + data_browser workspace <a id="step-1"></a>
@@ -138,17 +140,25 @@ Helper script for resolving merge conflicts during migration replays. Used when 
 
 ### Files <a id="step-2-files"></a>
 
-#### step-2-init.sh [📄](#file-step-2-init-sh) <a id="step-2-initsh"></a>
+#### step-2.sh [📄](#file-step-2-sh) <a id="step-2sh"></a>
 
-Initialize Levanter as workspace member. First script in the Step 2 migration sequence.
+Main Step 2 migration script for adding Levanter as a workspace member.
 
 #### step-2-sync.sh [📄](#file-step-2-sync-sh) <a id="step-2-syncsh"></a>
 
 Sync Levanter updates from upstream. Used to keep Levanter member in sync with upstream repository.
 
-#### step-2.sh [📄](#file-step-2-sh) <a id="step-2sh"></a>
+#### step-2-test.sh [📄](#file-step-2-test-sh) <a id="step-2-testsh"></a>
 
-Main Step 2 migration script for adding Levanter as a workspace member.
+Test harness that verifies step-2.sh is reproducible (similar to step-1-test.sh).
+
+#### step-2-workflows.patch [📄](#file-step-2-workflows-patch) <a id="step-2-workflowspatch"></a>
+
+Patch file for updating GitHub Actions workflows to work with Levanter workspace member.
+
+#### step-2-workflows-temp.patch [📄](#file-step-2-workflows-temp-patch) <a id="step-2-workflows-temppatch"></a>
+
+Temporary/intermediate patch for workflows (may be superseded by step-2-workflows.patch).
 
 ## Step 3 ✋: Haliax integration <a id="step-3"></a>
 
