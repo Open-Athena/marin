@@ -2,13 +2,14 @@
 # Workspace Migration - Step 2 Test
 #
 # Tests step-2.sh by running it from a step-1 base and verifying the result
-# Run from repo root: ./workspace-migration/step-2-test.sh [levanter-ref]
+# Run from repo root: ./workspace-migration/step-2-test.sh [reference] [levanter-ref]
 #
 # This creates a temporary test branch, runs step-2.sh, and compares
-# the resulting worktree and commits against the expected ws-2 branch.
+# the resulting worktree against the reference (current HEAD by default).
 #
 # Arguments:
-#   levanter-ref: Git ref to use for Levanter (default: auto-detect from ws-2)
+#   reference: Git ref to compare against (default: HEAD, can use branch name like ws-2)
+#   levanter-ref: Git ref to use for Levanter (default: auto-detect from reference)
 
 set -e
 
@@ -16,8 +17,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
 
+# Reference to compare against (default to current HEAD)
+REFERENCE="${1:-HEAD}"
 # Optional: Levanter ref to use
-LEVANTER_REF="${1:-}"
+LEVANTER_REF="${2:-}"
 
 echo "Workspace Migration - Step 2 Test"
 echo "=================================="
@@ -29,20 +32,25 @@ if ! git rev-parse --verify ws >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! git rev-parse --verify ws-2 >/dev/null 2>&1; then
-    echo "ERROR: ws-2 branch not found (step 2 reference)"
+if ! git rev-parse --verify "$REFERENCE" >/dev/null 2>&1; then
+    echo "ERROR: Reference '$REFERENCE' not found"
     exit 1
 fi
 
 # Save current branch
 ORIGINAL_BRANCH=$(git rev-parse --abbrev-ref HEAD)
-echo "Current branch: $ORIGINAL_BRANCH"
+REFERENCE_COMMIT=$(git rev-parse "$REFERENCE")
+REFERENCE_NAME=$(git rev-parse --abbrev-ref "$REFERENCE" 2>/dev/null || echo "$REFERENCE_COMMIT")
 
-# Auto-detect Levanter ref from ws-2 if not specified
+echo "Current branch: $ORIGINAL_BRANCH"
+echo "Reference: $REFERENCE_NAME ($REFERENCE_COMMIT)"
+echo ""
+
+# Auto-detect Levanter ref from reference if not specified
 if [ -z "$LEVANTER_REF" ]; then
-    echo "Auto-detecting Levanter commit from ws-2..."
-    # Find the levanter-pkg parent of the merge commit on ws-2
-    MERGE_COMMIT=$(git log ws-2 ^ws --merges --format=%H -1)
+    echo "Auto-detecting Levanter commit from $REFERENCE_NAME..."
+    # Find the levanter-pkg parent of the merge commit on reference
+    MERGE_COMMIT=$(git log "$REFERENCE" ^ws --merges --format=%H -1)
     if [ -n "$MERGE_COMMIT" ]; then
         # Get the second parent (levanter-pkg side)
         LEVANTER_PKG_COMMIT=$(git rev-parse ${MERGE_COMMIT}^2)
@@ -90,49 +98,49 @@ echo "Verifying results..."
 echo "===================="
 echo ""
 
-WS_2_HEAD=$(git rev-parse ws-2)
+REF_HEAD=$(git rev-parse "$REFERENCE")
 TEST_HEAD=$(git rev-parse HEAD)
 
-echo "ws-2 HEAD:    $WS_2_HEAD"
-echo "test HEAD:    $TEST_HEAD"
+echo "Reference HEAD: $REF_HEAD"
+echo "Test HEAD:      $TEST_HEAD"
 echo ""
 
 # Compare worktrees
 echo "Comparing worktrees..."
 
 # Get list of tracked files in both branches
-WS_2_FILES=$(git ls-tree -r --name-only ws-2 | sort)
+REF_FILES=$(git ls-tree -r --name-only "$REFERENCE" | sort)
 TEST_FILES=$(git ls-tree -r --name-only HEAD | sort)
 
-if [ "$WS_2_FILES" != "$TEST_FILES" ]; then
+if [ "$REF_FILES" != "$TEST_FILES" ]; then
     echo "ERROR: File lists differ!"
     echo ""
-    echo "Files in ws-2 but not in test:"
-    comm -23 <(echo "$WS_2_FILES") <(echo "$TEST_FILES")
+    echo "Files in $REFERENCE_NAME but not in test:"
+    comm -23 <(echo "$REF_FILES") <(echo "$TEST_FILES")
     echo ""
-    echo "Files in test but not in ws-2:"
-    comm -13 <(echo "$WS_2_FILES") <(echo "$TEST_FILES")
+    echo "Files in test but not in $REFERENCE_NAME:"
+    comm -13 <(echo "$REF_FILES") <(echo "$TEST_FILES")
     exit 1
 fi
 
-echo "✓ File lists match ($(echo "$WS_2_FILES" | wc -l | tr -d ' ') files)"
+echo "✓ File lists match ($(echo "$REF_FILES" | wc -l | tr -d ' ') files)"
 
 # Compare file contents
 echo "Comparing file contents..."
 DIFF_COUNT=0
-for file in $WS_2_FILES; do
-    WS_2_HASH=$(git rev-parse "ws-2:$file")
+for file in $REF_FILES; do
+    REF_HASH=$(git rev-parse "$REFERENCE:$file")
     TEST_HASH=$(git rev-parse "HEAD:$file")
 
-    if [ "$WS_2_HASH" != "$TEST_HASH" ]; then
+    if [ "$REF_HASH" != "$TEST_HASH" ]; then
         DIFF_COUNT=$((DIFF_COUNT + 1))
         if [ $DIFF_COUNT -eq 1 ]; then
             echo ""
             echo "Files with different content:"
         fi
         echo "  $file"
-        echo "    ws-2:  $WS_2_HASH"
-        echo "    test:  $TEST_HASH"
+        echo "    $REFERENCE_NAME: $REF_HASH"
+        echo "    test:            $TEST_HASH"
     fi
 done
 
@@ -141,7 +149,7 @@ if [ $DIFF_COUNT -gt 0 ]; then
     echo "ERROR: $DIFF_COUNT files have different content"
     echo ""
     echo "To investigate, compare branches:"
-    echo "  git diff ws-2 $TEST_BRANCH"
+    echo "  git diff $REFERENCE $TEST_BRANCH"
     exit 1
 fi
 
@@ -152,37 +160,37 @@ echo ""
 echo "Comparing commit structure..."
 
 # Get commit messages
-WS_2_COMMITS=$(git log ws-2 ^ws --oneline)
+REF_COMMITS=$(git log "$REFERENCE" ^ws --oneline)
 TEST_COMMITS=$(git log HEAD ^ws --oneline)
 
-WS_2_COUNT=$(echo "$WS_2_COMMITS" | wc -l | tr -d ' ')
+REF_COUNT=$(echo "$REF_COMMITS" | wc -l | tr -d ' ')
 TEST_COUNT=$(echo "$TEST_COMMITS" | wc -l | tr -d ' ')
 
-echo "ws-2 commits:  $WS_2_COUNT"
-echo "test commits:  $TEST_COUNT"
+echo "$REFERENCE_NAME commits: $REF_COUNT"
+echo "test commits:             $TEST_COUNT"
 
-if [ "$WS_2_COUNT" != "$TEST_COUNT" ]; then
+if [ "$REF_COUNT" != "$TEST_COUNT" ]; then
     echo "ERROR: Commit count mismatch!"
     echo ""
-    echo "ws-2 commits:"
-    echo "$WS_2_COMMITS"
+    echo "$REFERENCE_NAME commits:"
+    echo "$REF_COMMITS"
     echo ""
     echo "test commits:"
     echo "$TEST_COMMITS"
     exit 1
 fi
 
-echo "✓ Commit count matches ($WS_2_COUNT commits)"
+echo "✓ Commit count matches ($REF_COUNT commits)"
 
 # Verify commit messages match
-WS_2_MESSAGES=$(git log ws-2 ^ws --format="%s")
+REF_MESSAGES=$(git log "$REFERENCE" ^ws --format="%s")
 TEST_MESSAGES=$(git log HEAD ^ws --format="%s")
 
-if [ "$WS_2_MESSAGES" != "$TEST_MESSAGES" ]; then
+if [ "$REF_MESSAGES" != "$TEST_MESSAGES" ]; then
     echo "WARNING: Commit messages differ (this is expected if timestamps/hashes differ)"
     echo ""
-    echo "ws-2 messages:"
-    echo "$WS_2_MESSAGES"
+    echo "$REFERENCE_NAME messages:"
+    echo "$REF_MESSAGES"
     echo ""
     echo "test messages:"
     echo "$TEST_MESSAGES"
@@ -196,6 +204,6 @@ echo "========================================="
 echo "✓ Step 2 test PASSED!"
 echo "========================================="
 echo ""
-echo "The step-2.sh script successfully recreates the ws-2 worktree."
-echo "All files and contents match the reference ws-2 branch."
+echo "The step-2.sh script successfully recreates the $REFERENCE_NAME worktree."
+echo "All files and contents match the reference."
 echo ""

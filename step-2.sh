@@ -99,14 +99,14 @@ fi
 echo "Creating levanter-pkg branch from $LEVANTER_COMMIT..."
 git checkout -b levanter-pkg "$LEVANTER_COMMIT"
 
-# Get list of all files at root (excluding .github)
-FILES=$(git ls-tree --name-only HEAD | grep -v "^\.github$")
+# Get list of all files at root
+FILES=$(git ls-tree --name-only HEAD)
 
 # Create lib/levanter/ directory
 mkdir -p lib/levanter
 
-# Move all files to lib/levanter/ (excluding .github)
-echo "Moving files to lib/levanter/ (excluding .github/)..."
+# Move all files to lib/levanter/
+echo "Moving files to lib/levanter/..."
 for file in $FILES; do
     if [ "$file" != "lib" ]; then
         git mv "$file" "lib/levanter/"
@@ -142,7 +142,7 @@ echo "Committing restructuring..."
 git commit -m "Move Levanter to lib/levanter/ for workspace integration
 
 Restructure Levanter repository for integration as workspace member.
-All files moved to lib/levanter/ subdirectory (excluding .github/).
+All files moved to lib/levanter/ subdirectory.
 
 This branch preserves full Levanter Git history and will be merged
 into the main Marin workspace migration."
@@ -240,25 +240,36 @@ echo ""
 echo "=== Part 3: Migrating GitHub Actions workflows ==="
 echo ""
 
-# Rename Levanter workflows with levanter- prefix
-echo "Renaming Levanter workflows with levanter- prefix..."
+# Rename Marin workflows with marin- prefix
+echo "Renaming Marin workflows with marin- prefix..."
 for workflow in .github/workflows/*.yaml .github/workflows/*.yml; do
     if [ -f "$workflow" ]; then
         basename=$(basename "$workflow")
-        # Skip if already has levanter- prefix or is a Marin workflow
-        if [[ ! "$basename" =~ ^levanter- ]]; then
-            # This is a Levanter workflow, rename it
-            new_name="levanter-${basename}"
+        if [[ ! "$basename" =~ ^marin- ]]; then
+            new_name="marin-${basename}"
             git mv "$workflow" ".github/workflows/$new_name"
-            echo "  $basename -> $new_name"
+            echo "  $basename -> $new_name (Marin)"
         fi
     fi
 done
 
-# Move dependabot.yml if it exists
-if [ -f ".github/dependabot.yml" ]; then
-    echo "Renaming dependabot.yml with levanter- prefix..."
-    git mv .github/dependabot.yml .github/levanter-dependabot.yml
+# Move Levanter workflows from lib/levanter/.github/workflows/ to root with levanter- prefix
+if [ -d "lib/levanter/.github/workflows" ]; then
+    echo "Moving Levanter workflows to root with levanter- prefix..."
+    for workflow in lib/levanter/.github/workflows/*.yaml lib/levanter/.github/workflows/*.yml; do
+        if [ -f "$workflow" ]; then
+            basename=$(basename "$workflow")
+            new_name="levanter-${basename}"
+            git mv "$workflow" ".github/workflows/$new_name"
+            echo "  $basename -> $new_name (Levanter)"
+        fi
+    done
+fi
+
+# Move dependabot.yml if it exists in lib/levanter/.github/
+if [ -f "lib/levanter/.github/dependabot.yml" ]; then
+    echo "Moving dependabot.yml with levanter- prefix..."
+    git mv lib/levanter/.github/dependabot.yml .github/levanter-dependabot.yml
 fi
 
 # Apply workflow content patches
@@ -267,19 +278,26 @@ echo "Applying workflow content updates..."
 # Apply step-2-workflows.patch if it exists
 if [ -f "$SCRIPT_DIR/step-2-workflows.patch" ]; then
     echo "Applying step-2-workflows.patch..."
-    git apply "$SCRIPT_DIR/step-2-workflows.patch" || {
-        echo "WARNING: Patch failed to apply cleanly"
-        echo "You may need to manually update workflows for workspace structure"
-    }
+    if ! git apply "$SCRIPT_DIR/step-2-workflows.patch"; then
+        echo "ERROR: Failed to apply step-2-workflows.patch"
+        echo "Patch application is required for correct workflow updates"
+        exit 1
+    fi
+    echo "✓ Workflow patches applied successfully"
+else
+    echo "ERROR: step-2-workflows.patch not found at $SCRIPT_DIR/step-2-workflows.patch"
+    exit 1
 fi
 
 # Commit workflow changes
 git add .github/
 
-git commit -m "Migrate Levanter workflows to monorepo structure
+git commit -m "Migrate workflows to monorepo structure
 
-- Rename workflows with levanter- prefix to avoid conflicts
-- Update workflows for uv workspace structure:
+- Rename Marin workflows with marin- prefix for clarity
+- Rename Levanter workflows with levanter- prefix
+- Add 'Marin - ' and 'Levanter - ' prefixes to workflow names
+- Update Levanter workflows for uv workspace structure:
   - Add path filters to trigger only on relevant changes
   - Set working-directory: lib/levanter
   - Use --package levanter for uv commands
