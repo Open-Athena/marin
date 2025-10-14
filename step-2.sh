@@ -2,11 +2,14 @@
 # Workspace Migration - Step 2
 #
 # Hermetic script that merges Levanter (with preserved Git history) into workspace as lib/levanter/
-# Run from repo root: ./workspace-migration/step-2.sh [levanter-repo-path] [levanter-ref]
+# Run from repo root: ./workspace-migration/step-2.sh [options] [levanter-repo-path] [levanter-ref]
 #
 # Prerequisites:
 #   - Should be on ws branch (or branch with step 1 applied)
 #   - Levanter repo cloned (default: ../levanter)
+#
+# Options:
+#   -l, --lock-ref REF: Use uv.lock from specified git ref instead of re-resolving
 #
 # Arguments:
 #   levanter-repo-path: Path to Levanter repo (default: ../levanter)
@@ -17,6 +20,20 @@ set -e
 # Change to repo root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
+
+# Parse options
+LOCK_REF=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -l|--lock-ref)
+            LOCK_REF="$2"
+            shift 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 # Levanter repo path (default to sibling directory)
 LEVANTER_REPO="${1:-../levanter}"
@@ -234,8 +251,18 @@ echo "Updating marin to use workspace levanter..."
 sed_inplace 's|"levanter\[serve\] @ git+https://github.com/marin-community/levanter.git"|"levanter[serve]"|' lib/marin/pyproject.toml
 
 # Update uv.lock for new workspace structure
-echo "Updating uv.lock for workspace structure..."
-uv sync -q
+if [ -n "$LOCK_REF" ]; then
+    echo "Extracting uv.lock from $LOCK_REF..."
+    if ! git rev-parse --verify "$LOCK_REF" >/dev/null 2>&1; then
+        echo "ERROR: Lock ref '$LOCK_REF' not found"
+        exit 1
+    fi
+    git show "$LOCK_REF:uv.lock" > uv.lock
+    echo "✓ Using uv.lock from $LOCK_REF"
+else
+    echo "Updating uv.lock for workspace structure..."
+    uv sync -q
+fi
 
 # Stage all changes
 echo "Staging changes..."

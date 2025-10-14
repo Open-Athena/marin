@@ -2,10 +2,14 @@
 # Workspace Migration - Step 2 Test
 #
 # Tests step-2.sh by running it from a step-1 base and verifying the result
-# Run from repo root: ./workspace-migration/step-2-test.sh [reference] [levanter-ref]
+# Run from repo root: ./workspace-migration/step-2-test.sh [options] [reference] [levanter-ref]
 #
 # This creates a temporary test branch, runs step-2.sh, and compares
 # the resulting worktree against the reference (current HEAD by default).
+#
+# Options:
+#   -L, --allow-lock-diffs: Allow uv.lock to differ (it's a derived artifact)
+#   -l, --lock-ref REF: Use uv.lock from specified git ref (typically the reference being tested)
 #
 # Arguments:
 #   reference: Git ref to compare against (default: HEAD, can use branch name like ws-2)
@@ -16,6 +20,25 @@ set -e
 # Change to repo root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
+
+# Parse options
+ALLOW_LOCK_DIFFS=false
+LOCK_REF=""
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -L|--allow-lock-diffs)
+            ALLOW_LOCK_DIFFS=true
+            shift
+            ;;
+        -l|--lock-ref)
+            LOCK_REF="$2"
+            shift 2
+            ;;
+        *)
+            break
+            ;;
+    esac
+done
 
 # Reference to compare against (default to current HEAD)
 REFERENCE="${1:-HEAD}"
@@ -85,12 +108,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Run step-2.sh with detected/specified Levanter ref
+# Run step-2.sh with detected/specified Levanter ref and optional lock ref
 echo ""
 echo "Running step-2.sh..."
 echo "===================="
 echo ""
-./workspace-migration/step-2.sh ../levanter "$LEVANTER_REF"
+if [ -n "$LOCK_REF" ]; then
+    echo "Using uv.lock from: $LOCK_REF"
+    ./workspace-migration/step-2.sh --lock-ref "$LOCK_REF" ../levanter "$LEVANTER_REF"
+else
+    ./workspace-migration/step-2.sh ../levanter "$LEVANTER_REF"
+fi
 
 # Get commit info
 echo ""
@@ -128,7 +156,14 @@ echo "✓ File lists match ($(echo "$REF_FILES" | wc -l | tr -d ' ') files)"
 # Compare file contents
 echo "Comparing file contents..."
 DIFF_COUNT=0
+SKIPPED_COUNT=0
 for file in $REF_FILES; do
+    # Skip uv.lock if --allow-lock-diffs is set
+    if [ "$ALLOW_LOCK_DIFFS" = true ] && [ "$file" = "uv.lock" ]; then
+        SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+        continue
+    fi
+
     REF_HASH=$(git rev-parse "$REFERENCE:$file")
     TEST_HASH=$(git rev-parse "HEAD:$file")
 
@@ -153,7 +188,11 @@ if [ $DIFF_COUNT -gt 0 ]; then
     exit 1
 fi
 
-echo "✓ All file contents match"
+if [ $SKIPPED_COUNT -gt 0 ]; then
+    echo "✓ All file contents match (skipped $SKIPPED_COUNT files: uv.lock)"
+else
+    echo "✓ All file contents match"
+fi
 
 # Compare commit structure
 echo ""
