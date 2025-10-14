@@ -10,7 +10,7 @@
 #
 # Arguments:
 #   levanter-repo-path: Path to Levanter repo (default: ../levanter)
-#   levanter-ref: Git ref to use (default: main)
+#   levanter-ref: Git ref to use (default: HEAD from levanter-repo-path)
 
 set -e
 
@@ -20,8 +20,8 @@ cd "$SCRIPT_DIR/.."
 
 # Levanter repo path (default to sibling directory)
 LEVANTER_REPO="${1:-../levanter}"
-# Levanter ref to use (default to main)
-LEVANTER_REF="${2:-main}"
+# Levanter ref to use (default to whatever the repo is checked out to)
+LEVANTER_REF="${2:-}"
 
 # Helper function for cross-platform sed in-place editing
 sed_inplace() {
@@ -48,10 +48,32 @@ if [ ! -d "$LEVANTER_REPO/.git" ]; then
     exit 1
 fi
 
-# Verify lib/levanter doesn't already exist
+# If no levanter ref specified, use whatever HEAD is in the levanter repo
+if [ -z "$LEVANTER_REF" ]; then
+    LEVANTER_REF=$(git -C "$LEVANTER_REPO" rev-parse HEAD)
+    echo "No Levanter ref specified, using HEAD from $LEVANTER_REPO: $LEVANTER_REF"
+    echo ""
+fi
+
+# Clean up lib/levanter if it only contains untracked files
+# (git checkout can leave empty dirs behind, IDEs can create .idea, etc.)
 if [ -d "lib/levanter" ]; then
-    echo "ERROR: lib/levanter already exists"
-    exit 1
+    # Check if lib/levanter contains any tracked files
+    TRACKED_FILES=$(git ls-files lib/levanter 2>/dev/null || true)
+    if [ -n "$TRACKED_FILES" ]; then
+        echo "ERROR: lib/levanter already exists with tracked files:"
+        echo "$TRACKED_FILES"
+        echo "Please remove it manually or commit/stash your changes"
+        exit 1
+    fi
+
+    # Has only untracked files (or is empty) - safe to remove
+    if [ -n "$(ls -A lib/levanter 2>/dev/null)" ]; then
+        echo "Removing lib/levanter with untracked files (e.g., .idea/)..."
+    else
+        echo "Removing empty lib/levanter directory structure..."
+    fi
+    rm -rf lib/levanter
 fi
 
 # Get current branch name
@@ -213,7 +235,7 @@ sed_inplace 's|"levanter\[serve\] @ git+https://github.com/marin-community/levan
 
 # Update uv.lock for new workspace structure
 echo "Updating uv.lock for workspace structure..."
-uv sync
+uv sync -q
 
 # Stage all changes
 echo "Staging changes..."
