@@ -52,9 +52,9 @@ sed_inplace() {
     fi
 }
 
-# Update .gitignore to allow lib/ and CLAUDE.md
+# Update .gitignore to allow lib/
 echo "Updating .gitignore..."
-sed_inplace '/^lib\/$/d; /^CLAUDE\.md$/d' .gitignore
+sed_inplace '/^lib\/$/d' .gitignore
 
 # Create lib directory structure
 echo "Creating lib/ directory structure..."
@@ -100,13 +100,6 @@ patch -p0 < "$SCRIPT_DIR/step-1-pyproject-lib-marin.patch" || {
     exit 1
 }
 
-# Create CLAUDE.md from reference branch
-echo "Creating CLAUDE.md..."
-git show "$REFERENCE_BRANCH:CLAUDE.md" > CLAUDE.md || {
-    echo "ERROR: Could not extract CLAUDE.md from $REFERENCE_BRANCH"
-    exit 1
-}
-
 # lib/data_browser/pyproject.toml should already have correct requires-python
 # No changes needed
 
@@ -145,7 +138,7 @@ RUST_LOG=warn uv sync
 
 # Stage all changes (git mv and git rm --cached already staged, add new files)
 echo "Staging changes..."
-git add .gitignore pyproject.toml CLAUDE.md lib/ Makefile mkdocs.yml .github/workflows/ docs/ uv.lock
+git add .gitignore pyproject.toml lib/ Makefile mkdocs.yml .github/workflows/ docs/ uv.lock
 
 # Clean up temp file
 rm -f tmp/pyproject.toml.migration-backup
