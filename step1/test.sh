@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Test script to verify step-1.sh replay works correctly
+# Test script to verify step1 migration replay works correctly
 # This tests that replaying the migration produces the same tree as the original
 
 set -e
@@ -14,7 +14,7 @@ echo "Current branch: $CURRENT_BRANCH"
 # Verify we're on a branch with the migration already applied
 if [ ! -d "lib/marin" ]; then
     echo "ERROR: Migration not yet applied on current branch"
-    echo "Please run this test from a branch where step-1.sh has already been applied"
+    echo "Please run this test from a branch where step1 migration has already been applied"
     exit 1
 fi
 
@@ -28,17 +28,9 @@ git checkout -b "$TEST_BRANCH" "$PARENT_COMMIT"
 echo "Removing migration artifacts if present..."
 rm -rf lib/
 
-# Fetch workspace-migration scripts from gist (if not already present)
-if [ ! -d "workspace-migration" ]; then
-    echo "Fetching workspace-migration/ from gist..."
-    GIST_URL="https://gist.github.com/161fa24ff51c2df6466b5305801050b6.git"
-    git clone "$GIST_URL" workspace-migration
-    chmod +x workspace-migration/step-1.sh workspace-migration/test-step-1.sh
-fi
-
-# Run migration script with current branch as reference
+# Run migration script
 echo "Running migration script..."
-./workspace-migration/step-1.sh "$CURRENT_BRANCH"
+./workspace-migration/step1/main.py
 
 # Compare trees
 echo ""

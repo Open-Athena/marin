@@ -8,6 +8,7 @@ Update file paths from src/marin to lib/marin/src/marin.
 Updates all files using simple text replacement to preserve exact formatting.
 """
 
+import re
 from pathlib import Path
 
 
@@ -16,7 +17,10 @@ def update_file(file_path: Path, old_path: str, new_path: str):
     print(f"Updating {file_path}...")
 
     content = file_path.read_text()
-    updated_content = content.replace(old_path, new_path)
+    # Use negative lookbehind to avoid replacing src/marin that's already in lib/marin/src/marin
+    # Match src/marin but NOT if preceded by lib/marin/
+    pattern = r'(?<!lib/marin/)' + re.escape(old_path)
+    updated_content = re.sub(pattern, new_path, content)
 
     if content != updated_content:
         file_path.write_text(updated_content)
@@ -75,6 +79,18 @@ def main():
     if docs_dir.exists():
         for md_file in docs_dir.rglob('*.md'):
             update_file(md_file, old_path, new_path)
+
+    # Update Python imports from src.marin to marin
+    print("\nUpdating Python imports from 'from src.marin' to 'from marin'...")
+    for directory in ['experiments', 'scripts']:
+        dir_path = Path(directory)
+        if dir_path.exists():
+            for py_file in dir_path.rglob('*.py'):
+                content = py_file.read_text()
+                updated_content = content.replace('from src.marin', 'from marin')
+                if content != updated_content:
+                    py_file.write_text(updated_content)
+                    print(f"  ✓ Updated imports in {py_file}")
 
     # Update ray_deps.py to add --package marin
     print()
