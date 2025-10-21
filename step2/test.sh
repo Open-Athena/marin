@@ -19,7 +19,7 @@ set -e
 
 # Change to repo root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."
+cd "$SCRIPT_DIR/../.."
 
 # Parse options
 ALLOW_LOCK_DIFFS=false

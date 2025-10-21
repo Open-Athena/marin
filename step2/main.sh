@@ -19,7 +19,7 @@ set -e
 
 # Change to repo root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR/.."
+cd "$SCRIPT_DIR/../.."
 
 # Parse options
 LOCK_REF=""
@@ -324,17 +324,17 @@ fi
 # Apply workflow content patches
 echo "Applying workflow content updates..."
 
-# Apply step-2-workflows.patch if it exists
-if [ -f "$SCRIPT_DIR/step-2-workflows.patch" ]; then
-    echo "Applying step-2-workflows.patch..."
-    if ! git apply "$SCRIPT_DIR/step-2-workflows.patch"; then
-        echo "ERROR: Failed to apply step-2-workflows.patch"
+# Apply workflows.patch if it exists
+if [ -f "$SCRIPT_DIR/workflows.patch" ]; then
+    echo "Applying workflows.patch..."
+    if ! git apply "$SCRIPT_DIR/workflows.patch"; then
+        echo "ERROR: Failed to apply workflows.patch"
         echo "Patch application is required for correct workflow updates"
         exit 1
     fi
     echo "✓ Workflow patches applied successfully"
 else
-    echo "ERROR: step-2-workflows.patch not found at $SCRIPT_DIR/step-2-workflows.patch"
+    echo "ERROR: workflows.patch not found at $SCRIPT_DIR/workflows.patch"
     exit 1
 fi
 
