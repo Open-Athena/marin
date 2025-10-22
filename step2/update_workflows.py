@@ -5,8 +5,8 @@
 """
 Update GitHub Actions workflows for step 2 workspace migration.
 
-Uses ruamel.yaml to preserve formatting, comments, and whitespace while
-making structural changes.
+Uses lossless byte-level string replacement for maximum preservation of
+original formatting.
 
 Updates:
 1. Marin workflows: Add "Marin - " prefix to workflow name
@@ -18,39 +18,38 @@ Updates:
    - Use --package levanter for uv commands
 """
 
+import sys
 from pathlib import Path
-from ruamel.yaml import YAML
-from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+# Add lossless-yaml to path
+sys.path.insert(0, str(Path.home() / "c/lossless-yaml/src"))
+
+from lossless_yaml import LosslessYAML
 
 
 def update_marin_workflow(workflow_path: Path) -> bool:
     """
-    Update a Marin workflow with name prefix.
+    Update a Marin workflow with name prefix using lossless YAML.
 
     Returns:
         True if the workflow was updated, False if no changes needed
     """
-    yaml = YAML()
-    yaml.preserve_quotes = True
-    yaml.default_flow_style = False
+    doc = LosslessYAML.load(workflow_path)
 
-    with open(workflow_path, "r") as f:
-        doc = yaml.load(f)
-
-    if "name" not in doc:
+    if "name" not in doc.data:
         print(f"  ! Skipping {workflow_path.name} (no name field)")
         return False
 
-    old_name = doc["name"]
+    old_name = doc.data["name"]
     if old_name.startswith("Marin - "):
         print(f"  - {workflow_path.name}: already has prefix")
         return False
 
     new_name = f"Marin - {old_name}"
-    doc["name"] = new_name
 
-    with open(workflow_path, "w") as f:
-        yaml.dump(doc, f)
+    # Use replace_in_values for byte-level replacement
+    doc.replace_in_values(old_name, new_name)
+    doc.save()
 
     print(f"  ✓ {workflow_path.name}: {old_name} -> {new_name}")
     return True
@@ -58,138 +57,110 @@ def update_marin_workflow(workflow_path: Path) -> bool:
 
 def update_levanter_workflow(workflow_path: Path) -> bool:
     """
-    Update a Levanter workflow for workspace structure.
+    Update a Levanter workflow for workspace structure using lossless edits.
 
     Returns:
         True if the workflow was updated, False if no changes needed
     """
-    yaml = YAML()
-    yaml.preserve_quotes = True
-    yaml.default_flow_style = False
-    yaml.width = 4096  # Avoid line wrapping
+    # Read original bytes
+    original = workflow_path.read_text()
+    modified = original
 
-    with open(workflow_path, "r") as f:
-        doc = yaml.load(f)
+    print(f"  Processing {workflow_path.name}...")
 
-    modified = False
-
-    # 1. Update workflow name
-    if "name" in doc:
-        old_name = doc["name"]
+    # 1. Update workflow name with "Levanter - " prefix
+    # Match: name: <anything>
+    import re
+    name_match = re.search(r'^name:\s*(.+)$', modified, re.MULTILINE)
+    if name_match:
+        old_name = name_match.group(1)
         if not old_name.startswith("Levanter - "):
             new_name = f"Levanter - {old_name}"
-            doc["name"] = new_name
-            print(f"  ✓ {workflow_path.name}: {old_name} -> {new_name}")
-            modified = True
-        else:
-            print(f"  - {workflow_path.name}: name already has prefix")
+            modified = modified.replace(
+                f"name: {old_name}",
+                f"name: {new_name}",
+                1
+            )
+            print(f"    ✓ Updated name: {old_name} -> {new_name}")
 
     # 2. Update triggers with path filters
-    if "on" in doc:
-        on_config = doc["on"]
-        paths = [
-            "lib/levanter/**",
-            "uv.lock",
-            f".github/workflows/{workflow_path.name}",
-        ]
+    # Match: on: [push, pull_request]
+    if "on: [push, pull_request]" in modified:
+        paths_section = f'''on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/levanter/**'
+      - 'uv.lock'
+      - '.github/workflows/{workflow_path.name}'
+  pull_request:
+    paths:
+      - 'lib/levanter/**'
+      - 'uv.lock'
+      - '.github/workflows/{workflow_path.name}' '''
 
-        # Handle list format: on: [push, pull_request]
-        if isinstance(on_config, list):
-            new_on = CommentedMap()
+        modified = modified.replace("on: [push, pull_request]", paths_section.rstrip(), 1)
+        print(f"    ✓ Added path filters")
 
-            for trigger in on_config:
-                if trigger == "push":
-                    push_config = CommentedMap()
-                    push_config["branches"] = ["main"]
-                    push_config["paths"] = paths
-                    new_on["push"] = push_config
-                elif trigger == "pull_request":
-                    pr_config = CommentedMap()
-                    pr_config["paths"] = paths
-                    new_on["pull_request"] = pr_config
-                else:
-                    new_on[trigger] = CommentedMap()
+    # 3. Add defaults.run.working-directory after runs-on
+    # Match the pattern and insert defaults after runs-on line, preserving blank line before strategy
+    if "defaults:" not in modified or "working-directory: lib/levanter" not in modified:
+        # Find runs-on line and add defaults after it (before strategy section)
+        runs_on_pattern = r'(\n    runs-on: [^\n]+\n)(    strategy:)'
+        defaults_section = r'''\1    defaults:
+      run:
+        working-directory: lib/levanter
+\2'''
 
-            doc["on"] = new_on
-            print(f"    ✓ Added path filters to triggers")
-            modified = True
+        if re.search(runs_on_pattern, modified):
+            modified = re.sub(runs_on_pattern, defaults_section, modified, count=1)
+            print(f"    ✓ Added defaults.run.working-directory")
 
-    # 3. Update jobs
-    if "jobs" in doc:
-        for job_name, job_config in doc["jobs"].items():
-            if not isinstance(job_config, dict):
-                continue
+    # 4. Add working-directory to astral-sh/setup-uv step
+    # Find the setup-uv section and add working-directory if not present
+    setup_uv_section = re.search(r'(uses: astral-sh/setup-uv@[^\n]+\n\s+with:\n)((?:\s+[^\n]+\n)*?)(\s+- name:)',  modified, re.MULTILINE)
+    if setup_uv_section and "working-directory: lib/levanter" not in setup_uv_section.group(0):
+        # Extract the indent level from the last line in 'with'
+        indent = "          "  # 10 spaces to match other 'with' items
+        replacement = setup_uv_section.group(1) + setup_uv_section.group(2) + f"{indent}working-directory: lib/levanter\n" + setup_uv_section.group(3)
+        modified = modified[:setup_uv_section.start()] + replacement + modified[setup_uv_section.end():]
+        print(f"    ✓ Added working-directory to setup-uv")
 
-            # Add defaults.run.working-directory (insert after runs-on)
-            if job_config.get("defaults", {}).get("run", {}).get("working-directory") != "lib/levanter":
-                defaults = CommentedMap()
-                run_map = CommentedMap()
-                run_map["working-directory"] = "lib/levanter"
-                defaults["run"] = run_map
+    # 5. Update uv commands to include --package levanter
+    uv_commands_updated = False
 
-                # Insert defaults after runs-on to maintain order
-                if "runs-on" in job_config:
-                    # Create new ordered job_config
-                    new_config = CommentedMap()
-                    for key, value in job_config.items():
-                        new_config[key] = value
-                        if key == "runs-on":
-                            new_config["defaults"] = defaults
+    # Check if uv sync needs updating
+    if "uv sync" in modified:
+        new_modified = re.sub(
+            r'\buv sync(?! --package)',
+            'uv sync --package levanter',
+            modified
+        )
+        if new_modified != modified:
+            modified = new_modified
+            uv_commands_updated = True
 
-                    # Replace job config with ordered version
-                    doc["jobs"][job_name] = new_config
-                    job_config = new_config
-                else:
-                    job_config["defaults"] = defaults
+    # Check if uv run needs updating
+    if "uv run" in modified:
+        new_modified = re.sub(
+            r'\buv run(?! --package)',
+            'uv run --package levanter',
+            modified
+        )
+        if new_modified != modified:
+            modified = new_modified
+            uv_commands_updated = True
 
-                print(f"    ✓ Added defaults.run.working-directory to {job_name}")
-                modified = True
+    if uv_commands_updated:
+        print(f"    ✓ Updated uv commands")
 
-            # Update steps
-            if "steps" in job_config:
-                for step in job_config["steps"]:
-                    if not isinstance(step, dict):
-                        continue
+    # Save if modified
+    if modified != original:
+        workflow_path.write_text(modified)
+        return True
 
-                    # Add working-directory to astral-sh/setup-uv
-                    if "uses" in step and "astral-sh/setup-uv" in step["uses"]:
-                        if "with" not in step:
-                            step["with"] = CommentedMap()
-
-                        if step["with"].get("working-directory") != "lib/levanter":
-                            step["with"]["working-directory"] = "lib/levanter"
-                            print(f"    ✓ Added working-directory to setup-uv step")
-                            modified = True
-
-                    # Update uv commands
-                    if "run" in step and isinstance(step["run"], str):
-                        run_cmd = step["run"]
-                        original_cmd = run_cmd
-
-                        # Add --package levanter to uv sync
-                        if "uv sync" in run_cmd and "--package levanter" not in run_cmd:
-                            run_cmd = run_cmd.replace("uv sync", "uv sync --package levanter")
-
-                        # Add --package levanter to uv run (handle multi-line)
-                        if "uv run" in run_cmd and "--package levanter" not in run_cmd:
-                            lines = run_cmd.split("\n")
-                            new_lines = []
-                            for line in lines:
-                                if "uv run" in line and "--package levanter" not in line:
-                                    line = line.replace("uv run", "uv run --package levanter")
-                                new_lines.append(line)
-                            run_cmd = "\n".join(new_lines)
-
-                        if run_cmd != original_cmd:
-                            step["run"] = run_cmd
-                            print(f"    ✓ Updated uv commands")
-                            modified = True
-
-    if modified:
-        with open(workflow_path, "w") as f:
-            yaml.dump(doc, f)
-
-    return modified
+    return False
 
 
 def main():
@@ -199,10 +170,9 @@ def main():
 
     if not workflows_dir.exists():
         print(f"ERROR: Workflows directory not found: {workflows_dir}")
-        import sys
         sys.exit(1)
 
-    print("Updating GitHub Actions workflows...")
+    print("Updating GitHub Actions workflows with lossless byte-level edits...")
     print(f"Working directory: {cwd}")
     print()
 
