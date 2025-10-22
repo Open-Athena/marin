@@ -306,22 +306,9 @@ if [ -f "lib/levanter/.github/dependabot.yml" ]; then
     git mv lib/levanter/.github/dependabot.yml .github/levanter-dependabot.yml
 fi
 
-# Apply workflow content patches
-echo "Applying workflow content updates..."
-
-# Apply workflows.patch if it exists
-if [ -f "$SCRIPT_DIR/workflows.patch" ]; then
-    echo "Applying workflows.patch..."
-    if ! git apply "$SCRIPT_DIR/workflows.patch"; then
-        echo "ERROR: Failed to apply workflows.patch"
-        echo "Patch application is required for correct workflow updates"
-        exit 1
-    fi
-    echo "✓ Workflow patches applied successfully"
-else
-    echo "ERROR: workflows.patch not found at $SCRIPT_DIR/workflows.patch"
-    exit 1
-fi
+# Apply workflow content updates using ruamel.yaml
+echo "Updating workflow content..."
+"$SCRIPT_DIR/update_workflows.py"
 
 # Commit workflow changes
 git add .github/
