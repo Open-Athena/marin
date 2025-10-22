@@ -236,19 +236,20 @@ echo "Updating workspace configuration..."
 
 # Add levanter to workspace members
 if ! grep -q '"lib/levanter"' pyproject.toml; then
-    sed_inplace '/^members = \[/,/^\]/ s/\("lib\/data_browser",\)/\1\n    "lib\/levanter",/' pyproject.toml
+    sed_inplace '/^members = \[/,/^\]/ s/\("lib\/marin"\)/\1,\n    "lib\/levanter"/' pyproject.toml
 fi
 
-# Add levanter to workspace sources
-if ! grep -q 'levanter = { workspace = true }' pyproject.toml; then
-    sed_inplace '/marin = { workspace = true }/a\
-levanter = { workspace = true }
-' pyproject.toml
+# Add levanter to workspace sources - use awk for more reliable multiline insertion
+if ! grep -q 'tool.uv.sources.levanter' pyproject.toml; then
+    awk '
+        /^\[tool\.uv\.sources\.marin\]/ { print; getline; print; print ""; print "[tool.uv.sources.levanter]"; print "workspace = true"; next }
+        { print }
+    ' pyproject.toml > pyproject.toml.tmp && mv pyproject.toml.tmp pyproject.toml
 fi
 
 # Update marin's dependency on levanter to use workspace
 echo "Updating marin to use workspace levanter..."
-sed_inplace 's|"levanter\[serve\] @ git+https://github.com/marin-community/levanter.git"|"levanter[serve]"|' lib/marin/pyproject.toml
+sed_inplace 's|"levanter\[serve\] @ git+https://github.com/marin-community/levanter.git[^"]*"|"levanter[serve]"|' lib/marin/pyproject.toml
 
 # Update uv.lock for new workspace structure
 if [ -n "$LOCK_REF" ]; then
