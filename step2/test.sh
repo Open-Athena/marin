@@ -108,16 +108,16 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Run step-2.sh with detected/specified Levanter ref and optional lock ref
+# Run step2/main.sh with detected/specified Levanter ref and optional lock ref
 echo ""
-echo "Running step-2.sh..."
+echo "Running step2/main.sh..."
 echo "===================="
 echo ""
 if [ -n "$LOCK_REF" ]; then
     echo "Using uv.lock from: $LOCK_REF"
-    ./workspace-migration/step-2.sh --lock-ref "$LOCK_REF" ../levanter "$LEVANTER_REF"
+    ./workspace-migration/step2/main.sh --lock-ref "$LOCK_REF" ../levanter "$LEVANTER_REF"
 else
-    ./workspace-migration/step-2.sh ../levanter "$LEVANTER_REF"
+    ./workspace-migration/step2/main.sh ../levanter "$LEVANTER_REF"
 fi
 
 # Get commit info
@@ -243,6 +243,6 @@ echo "========================================="
 echo "✓ Step 2 test PASSED!"
 echo "========================================="
 echo ""
-echo "The step-2.sh script successfully recreates the $REFERENCE_NAME worktree."
+echo "The step2/main.sh script successfully recreates the $REFERENCE_NAME worktree."
 echo "All files and contents match the reference."
 echo ""
