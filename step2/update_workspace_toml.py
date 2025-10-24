@@ -104,27 +104,36 @@ def update_marin_pyproject(path: Path = Path("lib/marin/pyproject.toml")) -> Non
     # Update dolma dependency to use rw/tokenizers branch
     # This is a temporary workaround for tokenizers compatibility
     # See: https://github.com/marin-community/dolma/pull/1
-    quality_dedup_deps = doc.get("project", {}).get("optional-dependencies", {}).get("quality-dedup-consolidate", [])
+    quality_dedup_deps = None
+    if "project" in doc:
+        project = doc["project"]
+        if "optional-dependencies" in project:
+            opt_deps = project["optional-dependencies"]
+            if "quality_dedup_consolidate" in opt_deps:
+                quality_dedup_deps = opt_deps["quality_dedup_consolidate"]
 
     dolma_updated = False
-    for i, dep in enumerate(quality_dedup_deps):
-        if isinstance(dep, str) and dep.startswith("dolma @"):
-            # Check if it doesn't already have the branch
-            if "@rw/tokenizers" not in dep:
-                # Add the branch reference
-                quality_dedup_deps[i] = "dolma @ git+https://github.com/marin-community/dolma@rw/tokenizers"
-                dolma_updated = True
-                print(f"  ✓ Updated dolma dependency to use rw/tokenizers branch")
-                break
+    if quality_dedup_deps is not None:
+        for i, dep in enumerate(quality_dedup_deps):
+            if isinstance(dep, str) and dep.startswith("dolma @"):
+                # Check if it doesn't already have the branch
+                if "@rw/tokenizers" not in dep:
+                    # Add the branch reference
+                    quality_dedup_deps[i] = "dolma @ git+https://github.com/marin-community/dolma@rw/tokenizers"
+                    dolma_updated = True
+                    print(f"  ✓ Updated dolma dependency to use rw/tokenizers branch")
+                    break
 
-    if not dolma_updated:
-        # Check if it's already on the branch
-        for dep in quality_dedup_deps:
-            if isinstance(dep, str) and "dolma @" in dep and "@rw/tokenizers" in dep:
-                print("  - dolma already uses rw/tokenizers branch")
-                break
-        else:
-            print("  - dolma dependency not found in quality-dedup-consolidate")
+        if not dolma_updated:
+            # Check if it's already on the branch
+            for dep in quality_dedup_deps:
+                if isinstance(dep, str) and "dolma @" in dep and "@rw/tokenizers" in dep:
+                    print("  - dolma already uses rw/tokenizers branch")
+                    break
+            else:
+                print("  - dolma dependency not found in quality-dedup-consolidate")
+    else:
+        print("  - quality-dedup-consolidate section not found in pyproject.toml")
 
     # Write back
     content = tomlkit.dumps(doc)
