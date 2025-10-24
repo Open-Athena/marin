@@ -27,7 +27,27 @@ def update_marin_workflow(workflow_path: Path) -> bool:
 
     Returns:
         True if the workflow was updated, False if no changes needed
+
+    Raises:
+        WorkflowConflict if workflow is not in expected list
     """
+    # Whitelist of expected Marin workflows from ws branch (step 1)
+    EXPECTED_MARIN_WORKFLOWS = {
+        "marin-build-docker-images.yaml",
+        "marin-docs.yaml",
+        "marin-lint-and-format.yaml",
+        "marin-metrics.yaml",
+        "marin-quickstart.yaml",
+        "marin-unit-tests.yaml",
+        "marin-update-leaderboard.yml",
+    }
+
+    if workflow_path.name not in EXPECTED_MARIN_WORKFLOWS:
+        raise WorkflowConflict(
+            f"{workflow_path.name}: Unknown Marin workflow, not in expected list from ws branch (step 1). "
+            f"Add to EXPECTED_MARIN_WORKFLOWS list after reviewing."
+        )
+
     doc = YAYA.load(workflow_path)
 
     if "name" not in doc.data:
@@ -289,16 +309,25 @@ def main():
     # Update Marin workflows
     print("Updating Marin workflows:")
     marin_count = 0
+    error_count = 0
+
     for pattern in ["marin-*.yaml", "marin-*.yml"]:
         for workflow_path in sorted(workflows_dir.glob(pattern)):
-            if update_marin_workflow(workflow_path):
-                marin_count += 1
+            try:
+                if update_marin_workflow(workflow_path):
+                    marin_count += 1
+            except WorkflowConflict as e:
+                print(f"  ⚠️  CONFLICT: {e}")
+                error_count += 1
+            except Exception as e:
+                print(f"  ❌ ERROR in {workflow_path.name}: {e}")
+                error_count += 1
+                raise
     print()
 
     # Update Levanter workflows
     print("Updating Levanter workflows:")
     levanter_count = 0
-    error_count = 0
 
     for pattern in ["levanter-*.yaml", "levanter-*.yml"]:
         for workflow_path in sorted(workflows_dir.glob(pattern)):
