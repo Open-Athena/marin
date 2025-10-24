@@ -6,13 +6,13 @@ This directory contains migration scripts for the [uv workspace migration plan][
 
 ## Overview
 
-- **Step 1 ✅**: Initialize workspace
+- **Step 1 🚧**: Initialize workspace
   - Move `marin` package under `lib/marin/`
   - Root project contains `experiments/` (depends on `lib/marin`)
   - `data_browser` stays independent (not a workspace member)
   - Draft PR: [#1690]
 
-- **Step 2 ✅**: Add Levanter as workspace member
+- **Step 2 🚧**: Add Levanter as workspace member
   - Merge Levanter repo with full Git history
   - Move Levanter to `lib/levanter/`
   - Migrate workflows to monorepo structure
