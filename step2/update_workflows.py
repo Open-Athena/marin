@@ -5,8 +5,8 @@
 """
 Update GitHub Actions workflows for step 2 workspace migration.
 
-Uses lossless YAML editing for value changes and targeted string replacement
-for structural modifications.
+Uses lossless YAML editing to preserve byte-level formatting while making
+structural and value changes.
 
 Updates:
 1. Marin workflows: Add "Marin - " prefix to workflow name
@@ -19,7 +19,6 @@ Updates:
    - Update TPU SSH commands to use marin/lib/levanter paths
 """
 
-import re
 import sys
 from pathlib import Path
 
@@ -48,8 +47,6 @@ def update_marin_workflow(workflow_path: Path) -> bool:
         return False
 
     new_name = f"Marin - {old_name}"
-
-    # Use replace_in_values for byte-level replacement
     doc.replace_in_values(old_name, new_name)
     doc.save()
 
@@ -59,19 +56,15 @@ def update_marin_workflow(workflow_path: Path) -> bool:
 
 def update_levanter_workflow(workflow_path: Path) -> bool:
     """
-    Update a Levanter workflow for workspace structure.
-
-    Uses lossless YAML for value replacements and string operations for
-    structural changes.
+    Update a Levanter workflow for workspace structure using lossless YAML.
 
     Returns:
         True if the workflow was updated, False if no changes needed
     """
     print(f"  Processing {workflow_path.name}...")
 
-    # Phase 1: Use LosslessYAML for value replacements
     doc = LosslessYAML.load(workflow_path)
-    value_changes_made = False
+    modified = False
 
     # 1. Update workflow name with "Levanter - " prefix
     if "name" in doc.data:
@@ -79,143 +72,85 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         if not old_name.startswith("Levanter - "):
             new_name = f"Levanter - {old_name}"
             doc.replace_in_values(old_name, new_name)
-            value_changes_made = True
+            modified = True
             print(f"    ✓ Updated name: {old_name} -> {new_name}")
 
-    # 2. Update TPU SSH paths in command strings
-    # Use replace_in_values for paths within command strings
+    # 2. Expand trigger with path filters
+    # Check if on is a simple list like [push] or [push, pull_request]
+    if doc["on"] in (["push"], ["push", "pull_request"]):
+        doc.replace_key("on", {
+            "push": {
+                "branches": ["main"],
+                "paths": [
+                    "lib/levanter/**",
+                    "uv.lock",
+                    f".github/workflows/{workflow_path.name}"
+                ]
+            },
+            "pull_request": {
+                "paths": [
+                    "lib/levanter/**",
+                    "uv.lock",
+                    f".github/workflows/{workflow_path.name}"
+                ]
+            }
+        })
+        modified = True
+        print(f"    ✓ Added path filters")
+
+    # 3. Add defaults.run.working-directory to each job
+    for job_name, job in doc["jobs"].items():
+        try:
+            doc.assert_absent(f"jobs.{job_name}.defaults")
+            # Add defaults after runs-on
+            doc.add_key_after(
+                f"jobs.{job_name}.runs-on",
+                "defaults",
+                {"run": {"working-directory": "lib/levanter"}}
+            )
+            modified = True
+            print(f"    ✓ Added defaults.run.working-directory to {job_name}")
+        except (AssertionError, KeyError):
+            # Already exists or runs-on not found, skip
+            pass
+
+    # 4. Add working-directory to setup-uv steps
+    for job_name, job in doc["jobs"].items():
+        for i, step in enumerate(job.get("steps", [])):
+            if "uses" in step and "astral-sh/setup-uv" in step["uses"]:
+                if "with" in step:
+                    try:
+                        doc.assert_absent(f"jobs.{job_name}.steps[{i}].with.working-directory")
+                        # Would need add_key for dicts, but we can use a workaround
+                        # by getting the with dict and updating it
+                        step["with"]["working-directory"] = "lib/levanter"
+                        modified = True
+                        print(f"    ✓ Added working-directory to setup-uv in {job_name}")
+                    except AssertionError:
+                        pass
+
+    # 5. Update uv commands to include --package levanter
+    # Use regex replacement for command strings
+    original_text = workflow_path.read_text()
+    if "uv sync" in original_text or "uv run" in original_text:
+        doc.replace_in_values_regex(r'\buv sync(?! --package)', 'uv sync --package levanter')
+        doc.replace_in_values_regex(r'\buv run(?! --package)', 'uv run --package levanter')
+        modified = True
+        print(f"    ✓ Updated uv commands")
+
+    # 6. Update TPU SSH paths in command strings
     if "tpu" in workflow_path.name.lower():
-        # Check if there are SSH commands with old paths
         original_text = workflow_path.read_text()
         if "levanter/tests" in original_text or "levanter/infra" in original_text:
-            # These replacements work because they're in string values
             doc.replace_in_values("levanter/tests", "marin/lib/levanter/tests")
             doc.replace_in_values("levanter/infra", "marin/lib/levanter/infra")
-            value_changes_made = True
+            modified = True
             print(f"    ✓ Updated SSH paths: levanter/ -> marin/lib/levanter/")
 
-    # Save value changes if any were made
-    if value_changes_made:
+    if modified:
         doc.save()
 
-    # Phase 2: Structural modifications using string operations
-    # These changes add/modify YAML structure, which lossless-yaml doesn't handle
-    original = workflow_path.read_text()
-    modified = original
-    structural_changes_made = False
-
-    # 3. Add path filters to triggers
-    if "on: [push, pull_request]" in modified:
-        paths_section = f'''on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'lib/levanter/**'
-      - 'uv.lock'
-      - '.github/workflows/{workflow_path.name}'
-  pull_request:
-    paths:
-      - 'lib/levanter/**'
-      - 'uv.lock'
-      - '.github/workflows/{workflow_path.name}' '''
-        modified = modified.replace("on: [push, pull_request]", paths_section.rstrip(), 1)
-        structural_changes_made = True
-        print(f"    ✓ Added path filters")
-    elif "on: [push]" in modified:
-        paths_section = f'''on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'lib/levanter/**'
-      - 'uv.lock'
-      - '.github/workflows/{workflow_path.name}'
-  pull_request:
-    paths:
-      - 'lib/levanter/**'
-      - 'uv.lock'
-      - '.github/workflows/{workflow_path.name}' '''
-        modified = modified.replace("on: [push]", paths_section.rstrip(), 1)
-        structural_changes_made = True
-        print(f"    ✓ Added path filters")
-
-    # 4. Add defaults.run.working-directory after runs-on
-    if "defaults:" not in modified or "working-directory: lib/levanter" not in modified:
-        # Try pattern 1: runs-on followed by strategy
-        runs_on_pattern = r'(\n    runs-on: [^\n]+\n)(    strategy:)'
-        defaults_section = r'''\1    defaults:
-      run:
-        working-directory: lib/levanter
-\2'''
-
-        if re.search(runs_on_pattern, modified):
-            modified = re.sub(runs_on_pattern, defaults_section, modified, count=1)
-            structural_changes_made = True
-            print(f"    ✓ Added defaults.run.working-directory")
-        else:
-            # Try pattern 2: runs-on followed by env
-            runs_on_env_pattern = r'(\n    runs-on: [^\n]+\n)(    env:)'
-            if re.search(runs_on_env_pattern, modified):
-                modified = re.sub(runs_on_env_pattern, defaults_section, modified, count=1)
-                structural_changes_made = True
-                print(f"    ✓ Added defaults.run.working-directory")
-            else:
-                # Try pattern 3: runs-on followed by steps or if
-                runs_on_steps_pattern = r'(\n    runs-on: [^\n]+\n)(    if:|\n    steps:)'
-                if re.search(runs_on_steps_pattern, modified):
-                    modified = re.sub(runs_on_steps_pattern, defaults_section, modified, count=1)
-                    structural_changes_made = True
-                    print(f"    ✓ Added defaults.run.working-directory")
-
-    # 5. Add working-directory to astral-sh/setup-uv step
-    setup_uv_section = re.search(
-        r'(uses: astral-sh/setup-uv@[^\n]+\n\s+with:\n)((?:\s+[^\n]+\n)*?)(\s+- name:)',
-        modified,
-        re.MULTILINE
-    )
-    if setup_uv_section and "working-directory: lib/levanter" not in setup_uv_section.group(0):
-        indent = "          "  # 10 spaces to match other 'with' items
-        replacement = (
-            setup_uv_section.group(1) +
-            setup_uv_section.group(2) +
-            f"{indent}working-directory: lib/levanter\n" +
-            setup_uv_section.group(3)
-        )
-        modified = modified[:setup_uv_section.start()] + replacement + modified[setup_uv_section.end():]
-        structural_changes_made = True
-        print(f"    ✓ Added working-directory to setup-uv")
-
-    # 6. Update uv commands to include --package levanter
-    # Check if uv sync needs updating
-    if "uv sync" in modified:
-        new_modified = re.sub(
-            r'\buv sync(?! --package)',
-            'uv sync --package levanter',
-            modified
-        )
-        if new_modified != modified:
-            modified = new_modified
-            structural_changes_made = True
-            print(f"    ✓ Updated uv sync commands")
-
-    # Check if uv run needs updating
-    if "uv run" in modified:
-        new_modified = re.sub(
-            r'\buv run(?! --package)',
-            'uv run --package levanter',
-            modified
-        )
-        if new_modified != modified:
-            modified = new_modified
-            structural_changes_made = True
-            print(f"    ✓ Updated uv run commands")
-
-    # Save structural changes if any were made
-    if structural_changes_made:
-        workflow_path.write_text(modified)
-
-    return value_changes_made or structural_changes_made
+    return modified
 
 
 def main():
