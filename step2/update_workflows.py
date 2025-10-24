@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["ruamel.yaml>=0.17.0"]
+# dependencies = ["yaya @ file:///Users/ryan/c/yaya"]
 # ///
 """
 Update GitHub Actions workflows for step 2 workspace migration.
