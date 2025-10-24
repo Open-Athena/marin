@@ -1,6 +1,6 @@
 # Marin + Levanter Workspace Migration
 
-This directory contains migration scripts for the [uv workspace migration plan][migration-plan].
+This directory contains migration scripts for the [uv workspace migration plan][#1773].
 
 **Repository**: The workspace-migration scripts live in [Open-Athena/marin/tree/rw/wm][wm-branch], not the old Gist.
 
@@ -254,7 +254,7 @@ marin/
 
 **Status**: Not yet implemented
 
-See the [uv workspace migration plan][migration-plan] for details.
+See the [uv workspace migration plan][#1773] for details.
 
 Expected structure after step 3:
 
@@ -299,10 +299,10 @@ Both step 1 and step 2 are designed to be:
 
 ## Links
 
-[migration-plan]: https://github.com/marin-community/marin/blob/rw%2Fws/CLAUDE.md#repo-reorg
-[wm-branch]: https://github.com/Open-Athena/marin/tree/rw%2Fwm
+[#1773]: https://github.com/marin-community/marin/issues/1773
 [#1690]: https://github.com/marin-community/marin/pull/1690
 [#1723]: https://github.com/marin-community/marin/pull/1723
+[wm-branch]: https://github.com/Open-Athena/marin/tree/rw%2Fwm
 [yaya]: https://github.com/ryan-williams/yaya
 
 ### File Links
