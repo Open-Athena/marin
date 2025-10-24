@@ -277,8 +277,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         )
 
         if needs_path_update:
-            doc.replace_in_values("levanter/tests", "marin/lib/levanter/tests")
-            doc.replace_in_values("levanter/infra", "marin/lib/levanter/infra")
+            doc.replace_in_values_regex(r'\blevanter/(tests|infra)\b', r'marin/lib/levanter/\1')
             modified = True
             print(f"    ✓ Updated SSH paths: levanter/ -> marin/lib/levanter/")
         elif "marin/lib/levanter" in original_text:
