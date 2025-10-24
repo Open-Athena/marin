@@ -76,9 +76,14 @@ echo "Updating TPU setup scripts..."
 "$SCRIPT_DIR/update_tpu_setup.py"
 echo ""
 
+# Update pre-commit config to exclude lib/levanter/ from license insertion
+echo "Updating pre-commit config..."
+"$SCRIPT_DIR/update_precommit.py"
+echo ""
+
 # Stage changes
 echo "Staging changes..."
-git add .github/ lib/levanter/infra/helpers/
+git add .github/ lib/levanter/infra/helpers/ .pre-commit-config.yaml
 echo ""
 
 # Show what will be committed

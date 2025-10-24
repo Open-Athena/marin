@@ -314,8 +314,12 @@ echo "Updating workflow content..."
 echo "Updating TPU setup scripts..."
 "$SCRIPT_DIR/update_tpu_setup.py"
 
+# Update pre-commit config to exclude lib/levanter/ from license insertion
+echo "Updating pre-commit config..."
+"$SCRIPT_DIR/update_precommit.py"
+
 # Commit workflow and TPU setup changes
-git add .github/ lib/levanter/infra/helpers/
+git add .github/ lib/levanter/infra/helpers/ .pre-commit-config.yaml
 
 git commit -m "Migrate workflows to monorepo structure
 
@@ -331,6 +335,7 @@ git commit -m "Migrate workflows to monorepo structure
   - Clone marin monorepo instead of levanter repo
   - Use marin directory name instead of levanter
   - Add --package levanter to uv sync commands
+- Exclude lib/levanter/ from Marin license insertion (preserve Levanter licenses)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
