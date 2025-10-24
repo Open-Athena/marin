@@ -42,58 +42,85 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
             print(f"    ✓ Updated name: {old_name} -> {new_name}")
 
     # 2. Expand trigger with path filters - with conflict detection
+    # Assert exact expected trigger for each workflow from Levanter 95ab586e2
+    # Map workflow name (without levanter- prefix) to expected trigger
+    EXPECTED_TRIGGERS = {
+        "check_lockfile.yaml": ["push", "pull_request"],
+        "docker-base-image.yaml": "workflow_run",
+        "docker-cluster-image.yaml": "workflow_run",
+        "gpt2_small_itest.yaml": "workflow_run",
+        "launch_small_fast.yaml": "workflow_run",
+        "publish_dev.yaml": "workflow_run",
+        "run_entry_tests.yaml": ["push", "pull_request"],
+        "run_pre_commit.yaml": ["push", "pull_request"],
+        "run_ray_tests.yaml": ["push"],
+        "run_tests.yaml": ["push", "pull_request"],
+        "tpu_unit_tests.yaml": ["pull_request"],
+    }
+
+    # Get workflow basename without levanter- prefix
+    workflow_basename = workflow_path.name.replace("levanter-", "")
+    expected_trigger = EXPECTED_TRIGGERS.get(workflow_basename)
+
+    if expected_trigger is None:
+        raise WorkflowConflict(
+            f"{workflow_path.name}: Unknown workflow, not in Levanter 95ab586e2. "
+            f"Add to EXPECTED_TRIGGERS map."
+        )
+
     on_value = doc["on"]
 
-    if on_value in (["push"], ["push", "pull_request"]):
-        # Simple case: exactly what we expect
-        doc.replace_key("on", {
-            "push": {
-                "branches": ["main"],
-                "paths": [
-                    "lib/levanter/**",
-                    "uv.lock",
-                    f".github/workflows/{workflow_path.name}"
-                ]
-            },
-            "pull_request": {
-                "paths": [
-                    "lib/levanter/**",
-                    "uv.lock",
-                    f".github/workflows/{workflow_path.name}"
-                ]
-            }
-        })
-        modified = True
-        print(f"    ✓ Added path filters")
-    elif isinstance(on_value, dict):
-        # Already expanded - check if it has our path filters
-        if "push" in on_value and isinstance(on_value["push"], dict):
-            push_paths = on_value["push"].get("paths", [])
-            if "lib/levanter/**" in push_paths:
-                # Already has our paths, good
-                print(f"    - Already has path filters")
+    if expected_trigger == "workflow_run":
+        # Assert it has workflow_run trigger
+        if isinstance(on_value, dict) and "workflow_run" in on_value:
+            print(f"    - Skipping workflow_run trigger (doesn't need path filters)")
+        else:
+            raise WorkflowConflict(
+                f"{workflow_path.name}: Expected workflow_run trigger, got: {on_value}"
+            )
+    elif isinstance(expected_trigger, list):
+        # Assert exact list match, then add path filters
+        if on_value == expected_trigger:
+            # Matches expected - add path filters
+            doc.replace_key("on", {
+                "push": {
+                    "branches": ["main"],
+                    "paths": [
+                        "lib/levanter/**",
+                        "uv.lock",
+                        f".github/workflows/{workflow_path.name}"
+                    ]
+                },
+                "pull_request": {
+                    "paths": [
+                        "lib/levanter/**",
+                        "uv.lock",
+                        f".github/workflows/{workflow_path.name}"
+                    ]
+                }
+            })
+            modified = True
+            print(f"    ✓ Added path filters")
+        elif isinstance(on_value, dict):
+            # Already expanded - check if it has our path filters
+            if "push" in on_value and isinstance(on_value["push"], dict):
+                push_paths = on_value["push"].get("paths", [])
+                if "lib/levanter/**" in push_paths:
+                    print(f"    - Already has path filters")
+                else:
+                    raise WorkflowConflict(
+                        f"{workflow_path.name}: Has expanded trigger but wrong paths. "
+                        f"Expected lib/levanter/** in paths, got: {push_paths}"
+                    )
             else:
-                # Has dict structure but different paths - conflict!
                 raise WorkflowConflict(
-                    f"{workflow_path.name}: 'on.push' is a dict but doesn't have expected path filters. "
-                    f"Current paths: {push_paths}. Manual merge needed."
+                    f"{workflow_path.name}: Expected {expected_trigger}, got dict: {on_value}"
                 )
         else:
-            # Dict but no push, or push is not a dict - unexpected
             raise WorkflowConflict(
-                f"{workflow_path.name}: 'on' has unexpected structure: {on_value}. "
-                f"Expected list or dict with push/pull_request."
+                f"{workflow_path.name}: Expected {expected_trigger}, got: {on_value}. "
+                f"Levanter main may have changed - update EXPECTED_TRIGGERS."
             )
-    elif isinstance(on_value, list):
-        # List but not one we recognize
-        raise WorkflowConflict(
-            f"{workflow_path.name}: 'on' is {on_value}, not the expected [push] or [push, pull_request]. "
-            f"Manual intervention needed to add path filters."
-        )
-    else:
-        raise WorkflowConflict(
-            f"{workflow_path.name}: 'on' has unexpected type {type(on_value).__name__}: {on_value}"
-        )
 
     # 3. Add defaults.run.working-directory with better conflict handling
     for job_name, job in doc["jobs"].items():
