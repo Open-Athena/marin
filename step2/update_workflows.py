@@ -10,9 +10,6 @@ More robust version with better conflict detection and semantic checks.
 
 import sys
 from pathlib import Path
-
-sys.path.insert(0, str(Path.home() / "c/lossless-yaml/src"))
-
 from yaya import YAYA
 
 
@@ -38,6 +35,7 @@ def update_marin_workflow(workflow_path: Path) -> bool:
         "marin-lint-and-format.yaml",
         "marin-metrics.yaml",
         "marin-quickstart.yaml",
+        "marin-tpu-tests.yaml",
         "marin-unit-tests.yaml",
         "marin-update-leaderboard.yml",
     }
