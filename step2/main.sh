@@ -310,8 +310,12 @@ fi
 echo "Updating workflow content..."
 "$SCRIPT_DIR/update_workflows.py"
 
-# Commit workflow changes
-git add .github/
+# Update TPU setup scripts for monorepo structure
+echo "Updating TPU setup scripts..."
+"$SCRIPT_DIR/update_tpu_setup.py"
+
+# Commit workflow and TPU setup changes
+git add .github/ lib/levanter/infra/helpers/
 
 git commit -m "Migrate workflows to monorepo structure
 
@@ -322,6 +326,11 @@ git commit -m "Migrate workflows to monorepo structure
   - Add path filters to trigger only on relevant changes
   - Set working-directory: lib/levanter
   - Use --package levanter for uv commands
+  - Update TPU SSH commands to use marin/lib/levanter paths
+- Update TPU setup scripts for monorepo structure:
+  - Clone marin monorepo instead of levanter repo
+  - Use marin directory name instead of levanter
+  - Add --package levanter to uv sync commands
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 

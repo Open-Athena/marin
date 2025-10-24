@@ -104,9 +104,9 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         print(f"    ✓ Added path filters")
 
     # 3. Add defaults.run.working-directory after runs-on
-    # Match the pattern and insert defaults after runs-on line, preserving blank line before strategy
+    # Match the pattern and insert defaults after runs-on line
     if "defaults:" not in modified or "working-directory: lib/levanter" not in modified:
-        # Find runs-on line and add defaults after it (before strategy section)
+        # Try pattern 1: runs-on followed by strategy
         runs_on_pattern = r'(\n    runs-on: [^\n]+\n)(    strategy:)'
         defaults_section = r'''\1    defaults:
       run:
@@ -116,6 +116,18 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         if re.search(runs_on_pattern, modified):
             modified = re.sub(runs_on_pattern, defaults_section, modified, count=1)
             print(f"    ✓ Added defaults.run.working-directory")
+        else:
+            # Try pattern 2: runs-on followed by env (for workflows without strategy)
+            runs_on_env_pattern = r'(\n    runs-on: [^\n]+\n)(    env:)'
+            if re.search(runs_on_env_pattern, modified):
+                modified = re.sub(runs_on_env_pattern, defaults_section, modified, count=1)
+                print(f"    ✓ Added defaults.run.working-directory")
+            else:
+                # Try pattern 3: runs-on followed by steps (for simple workflows)
+                runs_on_steps_pattern = r'(\n    runs-on: [^\n]+\n)(    if:|\n    steps:)'
+                if re.search(runs_on_steps_pattern, modified):
+                    modified = re.sub(runs_on_steps_pattern, defaults_section, modified, count=1)
+                    print(f"    ✓ Added defaults.run.working-directory")
 
     # 4. Add working-directory to astral-sh/setup-uv step
     # Find the setup-uv section and add working-directory if not present
@@ -154,6 +166,21 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
 
     if uv_commands_updated:
         print(f"    ✓ Updated uv commands")
+
+    # 6. Update TPU SSH commands to use marin/lib/levanter paths
+    # Only for TPU test workflow
+    if "tpu" in workflow_path.name.lower() and "levanter/lib/levanter/" in modified:
+        ssh_commands_updated = False
+        # Update paths in SSH commands from levanter/lib/levanter/ to marin/lib/levanter/
+        new_modified = re.sub(
+            r'levanter/lib/levanter/',
+            r'marin/lib/levanter/',
+            modified
+        )
+        if new_modified != modified:
+            modified = new_modified
+            ssh_commands_updated = True
+            print(f"    ✓ Updated SSH commands to use marin/lib/levanter paths")
 
     # Save if modified
     if modified != original:
