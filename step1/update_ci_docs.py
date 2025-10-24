@@ -89,30 +89,47 @@ def update_workflows():
 
 
 def update_readthedocs():
-    """Update ReadTheDocs config to install marin package."""
+    """Update ReadTheDocs config to use uv workspace structure."""
     print("Updating ReadTheDocs config...")
 
     rtd_config = Path('.readthedocs.yaml')
     if rtd_config.exists():
         content = rtd_config.read_text()
 
-        # Add marin package installation if not present
-        if 'pip install -e lib/marin' not in content:
-            # Find the pre_install section and add the line
+        # Replace jobs.pre_install structure with commands structure using uv
+        # Old structure uses pip install -e lib/marin
+        # New structure uses uv sync --package marin with build.commands
+        if 'jobs:' in content and 'pre_install:' in content:
+            # Replace entire build section with uv-based commands
             updated = re.sub(
-                r'(pre_install:.*?)(\n\nmkdocs:)',
-                r'\1\n      - pip install -e lib/marin\2',
+                r'build:\n  os: "ubuntu-24\.04"\n  tools:\n    python: "[^"]+"\n  jobs:\n    pre_install:.*?(?=\n\n|\Z)',
+                '''build:
+  os: "ubuntu-24.04"
+  tools:
+    python: "3.11"
+  commands:
+    - pip install uv
+    - uv sync --package marin
+    - uv pip install mkdocs mkdocs-material mkdocstrings[python] markdown-include mkdocs-include-markdown-plugin
+    - uv run mkdocs build --strict --site-dir $READTHEDOCS_OUTPUT/html''',
                 content,
                 flags=re.DOTALL
             )
 
+            # Remove mkdocs section if present (redundant with commands)
+            updated = re.sub(r'\n\nmkdocs:\n  configuration: mkdocs\.yml\n?', '', updated)
+
+            # Ensure trailing newline (pre-commit requirement)
+            if not updated.endswith('\n'):
+                updated += '\n'
+
             if updated != content:
                 rtd_config.write_text(updated)
-                print(f"  ✓ Updated {rtd_config}")
+                print(f"  ✓ Updated {rtd_config} to use uv workspace structure")
             else:
                 print(f"  ⚠ Could not update {rtd_config} automatically")
         else:
-            print(f"  - No changes needed in {rtd_config}")
+            print(f"  - {rtd_config} already uses correct structure or needs manual update")
     else:
         print(f"  ⚠ {rtd_config} not found")
 
