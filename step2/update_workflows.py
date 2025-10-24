@@ -61,8 +61,7 @@ def update_marin_workflow(workflow_path: Path) -> bool:
 
     new_name = f"Marin - {old_name}"
 
-    # Use replace_in_values for the name field
-    doc.replace_in_values(old_name, new_name)
+    doc.replace_key("name", new_name)
     doc.save()
 
     print(f"  ✓ {workflow_path.name}: {old_name} -> {new_name}")
@@ -85,7 +84,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         old_name = doc.data["name"]
         if not old_name.startswith("Levanter - "):
             new_name = f"Levanter - {old_name}"
-            doc.replace_in_values(old_name, new_name)
+            doc.replace_key("name", new_name)
             modified = True
             print(f"    ✓ Updated name: {old_name} -> {new_name}")
 
@@ -247,10 +246,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
                             )
                         print(f"    - setup-uv in {job_name} already has working-directory")
                     except KeyError:
-                        # Not set, add it
-                        # NOTE: Direct mutation - not ideal, but works for now
-                        # TODO: Need add_key API for existing dicts
-                        step["with"]["working-directory"] = "lib/levanter"
+                        doc.ensure_key(f"jobs.{job_name}.steps[{i}].with.working-directory", "lib/levanter")
                         modified = True
                         print(f"    ✓ Added working-directory to setup-uv in {job_name}")
 
