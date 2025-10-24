@@ -5,68 +5,34 @@
 """
 Update GitHub Actions workflows for step 2 workspace migration.
 
-Uses lossless YAML editing to preserve byte-level formatting while making
-structural and value changes.
-
-Updates:
-1. Marin workflows: Add "Marin - " prefix to workflow name
-2. Levanter workflows:
-   - Add "Levanter - " prefix to workflow name
-   - Add path filters to trigger only on relevant changes
-   - Set defaults.run.working-directory: lib/levanter
-   - Add working-directory to astral-sh/setup-uv step
-   - Use --package levanter for uv commands
-   - Update TPU SSH commands to use marin/lib/levanter paths
+More robust version with better conflict detection and semantic checks.
 """
 
 import sys
 from pathlib import Path
 
-# Add lossless-yaml to path
 sys.path.insert(0, str(Path.home() / "c/lossless-yaml/src"))
 
 from lossless_yaml import LosslessYAML
 
 
-def update_marin_workflow(workflow_path: Path) -> bool:
-    """
-    Update a Marin workflow with name prefix using lossless YAML.
-
-    Returns:
-        True if the workflow was updated, False if no changes needed
-    """
-    doc = LosslessYAML.load(workflow_path)
-
-    if "name" not in doc.data:
-        print(f"  ! Skipping {workflow_path.name} (no name field)")
-        return False
-
-    old_name = doc.data["name"]
-    if old_name.startswith("Marin - "):
-        print(f"  - {workflow_path.name}: already has prefix")
-        return False
-
-    new_name = f"Marin - {old_name}"
-    doc.replace_in_values(old_name, new_name)
-    doc.save()
-
-    print(f"  ✓ {workflow_path.name}: {old_name} -> {new_name}")
-    return True
+class WorkflowConflict(Exception):
+    """Raised when a workflow has unexpected structure requiring manual intervention."""
+    pass
 
 
 def update_levanter_workflow(workflow_path: Path) -> bool:
     """
-    Update a Levanter workflow for workspace structure using lossless YAML.
+    Update a Levanter workflow with semantic conflict detection.
 
-    Returns:
-        True if the workflow was updated, False if no changes needed
+    Raises WorkflowConflict if manual intervention is needed.
     """
     print(f"  Processing {workflow_path.name}...")
 
     doc = LosslessYAML.load(workflow_path)
     modified = False
 
-    # 1. Update workflow name with "Levanter - " prefix
+    # 1. Update workflow name
     if "name" in doc.data:
         old_name = doc.data["name"]
         if not old_name.startswith("Levanter - "):
@@ -75,9 +41,11 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
             modified = True
             print(f"    ✓ Updated name: {old_name} -> {new_name}")
 
-    # 2. Expand trigger with path filters
-    # Check if on is a simple list like [push] or [push, pull_request]
-    if doc["on"] in (["push"], ["push", "pull_request"]):
+    # 2. Expand trigger with path filters - with conflict detection
+    on_value = doc["on"]
+
+    if on_value in (["push"], ["push", "pull_request"]):
+        # Simple case: exactly what we expect
         doc.replace_key("on", {
             "push": {
                 "branches": ["main"],
@@ -97,22 +65,90 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         })
         modified = True
         print(f"    ✓ Added path filters")
+    elif isinstance(on_value, dict):
+        # Already expanded - check if it has our path filters
+        if "push" in on_value and isinstance(on_value["push"], dict):
+            push_paths = on_value["push"].get("paths", [])
+            if "lib/levanter/**" in push_paths:
+                # Already has our paths, good
+                print(f"    - Already has path filters")
+            else:
+                # Has dict structure but different paths - conflict!
+                raise WorkflowConflict(
+                    f"{workflow_path.name}: 'on.push' is a dict but doesn't have expected path filters. "
+                    f"Current paths: {push_paths}. Manual merge needed."
+                )
+        else:
+            # Dict but no push, or push is not a dict - unexpected
+            raise WorkflowConflict(
+                f"{workflow_path.name}: 'on' has unexpected structure: {on_value}. "
+                f"Expected list or dict with push/pull_request."
+            )
+    elif isinstance(on_value, list):
+        # List but not one we recognize
+        raise WorkflowConflict(
+            f"{workflow_path.name}: 'on' is {on_value}, not the expected [push] or [push, pull_request]. "
+            f"Manual intervention needed to add path filters."
+        )
+    else:
+        raise WorkflowConflict(
+            f"{workflow_path.name}: 'on' has unexpected type {type(on_value).__name__}: {on_value}"
+        )
 
-    # 3. Add defaults.run.working-directory to each job
+    # 3. Add defaults.run.working-directory with better conflict handling
     for job_name, job in doc["jobs"].items():
         try:
-            doc.assert_absent(f"jobs.{job_name}.defaults")
-            # Add defaults after runs-on
-            doc.add_key_after(
-                f"jobs.{job_name}.runs-on",
-                "defaults",
-                {"run": {"working-directory": "lib/levanter"}}
-            )
-            modified = True
-            print(f"    ✓ Added defaults.run.working-directory to {job_name}")
-        except (AssertionError, KeyError):
-            # Already exists or runs-on not found, skip
-            pass
+            # Check if working-directory is already set correctly
+            existing_wd = doc.get_path(f"jobs.{job_name}.defaults.run.working-directory")
+            if existing_wd == "lib/levanter":
+                print(f"    - {job_name} already has working-directory")
+            else:
+                raise WorkflowConflict(
+                    f"{workflow_path.name}: Job {job_name} has defaults.run.working-directory={existing_wd!r}, "
+                    f"expected 'lib/levanter'. Manual merge needed."
+                )
+        except KeyError:
+            # working-directory not set, need to add it
+
+            # Check if defaults.run exists
+            try:
+                doc.get_path(f"jobs.{job_name}.defaults.run")
+                # Exists but no working-directory - add it
+                # TODO: Need add_key API for this
+                # For now, this is a limitation
+                raise WorkflowConflict(
+                    f"{workflow_path.name}: Job {job_name} has defaults.run but no working-directory. "
+                    f"Need add_key API to merge this properly."
+                )
+            except KeyError:
+                pass
+
+            # Check if defaults exists at all
+            try:
+                doc.get_path(f"jobs.{job_name}.defaults")
+                # Exists but no .run - conflict
+                raise WorkflowConflict(
+                    f"{workflow_path.name}: Job {job_name} has defaults but not defaults.run. "
+                    f"Manual intervention needed."
+                )
+            except KeyError:
+                pass
+
+            # No defaults at all - add the whole thing
+            try:
+                doc.add_key_after(
+                    f"jobs.{job_name}.runs-on",
+                    "defaults",
+                    {"run": {"working-directory": "lib/levanter"}}
+                )
+                modified = True
+                print(f"    ✓ Added defaults.run.working-directory to {job_name}")
+            except KeyError:
+                # No runs-on - this is unusual and should be flagged
+                raise WorkflowConflict(
+                    f"{workflow_path.name}: Job {job_name} has no runs-on key. "
+                    f"Unusual structure, manual intervention needed."
+                )
 
     # 4. Add working-directory to setup-uv steps
     for job_name, job in doc["jobs"].items():
@@ -120,32 +156,53 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
             if "uses" in step and "astral-sh/setup-uv" in step["uses"]:
                 if "with" in step:
                     try:
-                        doc.assert_absent(f"jobs.{job_name}.steps[{i}].with.working-directory")
-                        # Would need add_key for dicts, but we can use a workaround
-                        # by getting the with dict and updating it
+                        existing = doc.get_path(f"jobs.{job_name}.steps[{i}].with.working-directory")
+                        if existing != "lib/levanter":
+                            raise WorkflowConflict(
+                                f"{workflow_path.name}: setup-uv in {job_name} has working-directory={existing!r}, "
+                                f"expected 'lib/levanter'."
+                            )
+                        print(f"    - setup-uv in {job_name} already has working-directory")
+                    except KeyError:
+                        # Not set, add it
+                        # NOTE: Direct mutation - not ideal, but works for now
+                        # TODO: Need add_key API for existing dicts
                         step["with"]["working-directory"] = "lib/levanter"
                         modified = True
                         print(f"    ✓ Added working-directory to setup-uv in {job_name}")
-                    except AssertionError:
-                        pass
 
-    # 5. Update uv commands to include --package levanter
-    # Use regex replacement for command strings
+    # 5. Update uv commands - check if actually needed
     original_text = workflow_path.read_text()
-    if "uv sync" in original_text or "uv run" in original_text:
+    needs_uv_update = False
+
+    # Check if there are uv commands without --package
+    if "uv sync" in original_text and "uv sync --package levanter" not in original_text:
+        needs_uv_update = True
+    if "uv run" in original_text and "uv run --package levanter" not in original_text:
+        needs_uv_update = True
+
+    if needs_uv_update:
         doc.replace_in_values_regex(r'\buv sync(?! --package)', 'uv sync --package levanter')
         doc.replace_in_values_regex(r'\buv run(?! --package)', 'uv run --package levanter')
         modified = True
         print(f"    ✓ Updated uv commands")
+    elif "uv sync" in original_text or "uv run" in original_text:
+        print(f"    - uv commands already have --package")
 
-    # 6. Update TPU SSH paths in command strings
+    # 6. Update TPU SSH paths - check if actually needed
     if "tpu" in workflow_path.name.lower():
-        original_text = workflow_path.read_text()
-        if "levanter/tests" in original_text or "levanter/infra" in original_text:
+        needs_path_update = (
+            "levanter/tests" in original_text or
+            "levanter/infra" in original_text
+        )
+
+        if needs_path_update:
             doc.replace_in_values("levanter/tests", "marin/lib/levanter/tests")
             doc.replace_in_values("levanter/infra", "marin/lib/levanter/infra")
             modified = True
             print(f"    ✓ Updated SSH paths: levanter/ -> marin/lib/levanter/")
+        elif "marin/lib/levanter" in original_text:
+            print(f"    - SSH paths already updated")
 
     if modified:
         doc.save()
@@ -154,7 +211,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
 
 
 def main():
-    """Update all workflows."""
+    """Update all workflows with conflict detection."""
     cwd = Path.cwd()
     workflows_dir = cwd / ".github/workflows"
 
@@ -162,33 +219,32 @@ def main():
         print(f"ERROR: Workflows directory not found: {workflows_dir}")
         sys.exit(1)
 
-    print("Updating GitHub Actions workflows...")
+    print("Updating Levanter workflows...")
     print(f"Working directory: {cwd}")
     print()
 
-    # Update Marin workflows
-    print("Updating Marin workflows:")
-    marin_count = 0
-    for pattern in ["marin-*.yaml", "marin-*.yml"]:
-        for workflow_path in sorted(workflows_dir.glob(pattern)):
-            if update_marin_workflow(workflow_path):
-                marin_count += 1
-    print(f"  Updated {marin_count} Marin workflows")
-    print()
+    updated_count = 0
+    error_count = 0
 
-    # Update Levanter workflows
-    print("Updating Levanter workflows:")
-    levanter_count = 0
     for pattern in ["levanter-*.yaml", "levanter-*.yml"]:
         for workflow_path in sorted(workflows_dir.glob(pattern)):
-            if update_levanter_workflow(workflow_path):
-                levanter_count += 1
-    print(f"  Updated {levanter_count} Levanter workflows")
-    print()
+            try:
+                if update_levanter_workflow(workflow_path):
+                    updated_count += 1
+            except WorkflowConflict as e:
+                print(f"  ⚠️  CONFLICT: {e}")
+                error_count += 1
+            except Exception as e:
+                print(f"  ❌ ERROR in {workflow_path.name}: {e}")
+                error_count += 1
+                raise
 
-    total = marin_count + levanter_count
-    if total > 0:
-        print(f"✓ Updated {total} workflows!")
+    print()
+    if error_count > 0:
+        print(f"⚠️  {error_count} conflicts detected - manual intervention needed")
+        sys.exit(1)
+    elif updated_count > 0:
+        print(f"✓ Updated {updated_count} workflows!")
     else:
         print("✓ All workflows already up to date!")
 
