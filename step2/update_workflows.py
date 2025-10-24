@@ -84,7 +84,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
             print(f"    ✓ Updated name: {old_name} -> {new_name}")
 
     # 2. Update triggers with path filters
-    # Match: on: [push, pull_request]
+    # Match: on: [push, pull_request] or on: [push]
     if "on: [push, pull_request]" in modified:
         paths_section = f'''on:
   push:
@@ -101,6 +101,23 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
       - '.github/workflows/{workflow_path.name}' '''
 
         modified = modified.replace("on: [push, pull_request]", paths_section.rstrip(), 1)
+        print(f"    ✓ Added path filters")
+    elif "on: [push]" in modified:
+        paths_section = f'''on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'lib/levanter/**'
+      - 'uv.lock'
+      - '.github/workflows/{workflow_path.name}'
+  pull_request:
+    paths:
+      - 'lib/levanter/**'
+      - 'uv.lock'
+      - '.github/workflows/{workflow_path.name}' '''
+
+        modified = modified.replace("on: [push]", paths_section.rstrip(), 1)
         print(f"    ✓ Added path filters")
 
     # 3. Add defaults.run.working-directory after runs-on
@@ -169,17 +186,27 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
 
     # 6. Update TPU SSH commands to use marin/lib/levanter paths
     # Only for TPU test workflow
-    if "tpu" in workflow_path.name.lower() and "levanter/lib/levanter/" in modified:
-        ssh_commands_updated = False
-        # Update paths in SSH commands from levanter/lib/levanter/ to marin/lib/levanter/
+    if "tpu" in workflow_path.name.lower() and "gcloud compute tpus tpu-vm ssh" in modified:
+        # Update paths in SSH commands from levanter/ to marin/lib/levanter/
+        # This handles paths like "levanter/tests" and "levanter/infra/run.sh"
+        # Look for patterns within SSH command strings
         new_modified = re.sub(
-            r'levanter/lib/levanter/',
-            r'marin/lib/levanter/',
+            r'(gcloud compute tpus tpu-vm ssh[^"]*"[^"]*\bPYTHONPATH=\$PYTHONPATH:)levanter/',
+            r'\1marin/lib/levanter/',
             modified
+        )
+        new_modified = re.sub(
+            r'(\bCI=1 bash )levanter/',
+            r'\1marin/lib/levanter/',
+            new_modified
+        )
+        new_modified = re.sub(
+            r'(\bpytest )levanter/',
+            r'\1marin/lib/levanter/',
+            new_modified
         )
         if new_modified != modified:
             modified = new_modified
-            ssh_commands_updated = True
             print(f"    ✓ Updated SSH commands to use marin/lib/levanter paths")
 
     # Save if modified

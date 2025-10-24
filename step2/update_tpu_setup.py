@@ -90,6 +90,17 @@ def update_tpu_setup_script(script_path: Path) -> bool:
         )
         print(f"    ✓ Updated uv sync to use --package levanter")
 
+    # 5. Add venv_path.txt creation for run.sh to find venv
+    if 'venv_path.txt' not in modified:
+        # Add after uv sync command
+        venv_path_line = '\n# Create venv_path.txt so run.sh can find the venv at monorepo root\necho "$(pwd)/.venv" > lib/levanter/infra/venv_path.txt'
+        modified = re.sub(
+            r'(uv sync --package levanter --extra tpu\n)',
+            r'\1' + venv_path_line + '\n',
+            modified
+        )
+        print(f"    ✓ Added venv_path.txt creation")
+
     # Save if modified
     if modified != original:
         script_path.write_text(modified)
