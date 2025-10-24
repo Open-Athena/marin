@@ -207,27 +207,30 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
                 pass
 
             # No defaults at all - add the whole thing
-            # Try to add after 'if' if it exists, otherwise after 'runs-on'
-            after_key = None
-            try:
-                doc.get_path(f"jobs.{job_name}.if")
-                after_key = "if"
-            except KeyError:
-                after_key = "runs-on"
+            # Try to insert between various job keys and 'steps'
+            # Order matters: try more specific keys first (if, strategy, env, permissions) before runs-on
+            inserted = False
+            for prev_key in ["if", "strategy", "env", "permissions", "needs", "runs-on"]:
+                try:
+                    doc.insert_key_between(
+                        f"jobs.{job_name}",
+                        prev_key=prev_key,
+                        next_key="steps",
+                        new_key="defaults",
+                        value={"run": {"working-directory": "lib/levanter"}}
+                    )
+                    modified = True
+                    inserted = True
+                    print(f"    ✓ Added defaults.run.working-directory to {job_name} (between {prev_key} and steps)")
+                    break
+                except (KeyError, ValueError):
+                    continue
 
-            try:
-                doc.add_key_after(
-                    f"jobs.{job_name}.{after_key}",
-                    "defaults",
-                    {"run": {"working-directory": "lib/levanter"}}
-                )
-                modified = True
-                print(f"    ✓ Added defaults.run.working-directory to {job_name} (after {after_key})")
-            except KeyError:
-                # No runs-on - this is unusual and should be flagged
+            if not inserted:
+                # None of the expected structures worked
                 raise WorkflowConflict(
-                    f"{workflow_path.name}: Job {job_name} has no runs-on key. "
-                    f"Unusual structure, manual intervention needed."
+                    f"{workflow_path.name}: Job {job_name} has unusual structure. "
+                    f"Cannot insert defaults before 'steps'. Try adding it manually."
                 )
 
     # 4. Add working-directory to setup-uv steps
