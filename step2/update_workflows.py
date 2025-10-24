@@ -13,12 +13,40 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path.home() / "c/lossless-yaml/src"))
 
-from lossless_yaml import LosslessYAML
+from yaya import YAYA
 
 
 class WorkflowConflict(Exception):
     """Raised when a workflow has unexpected structure requiring manual intervention."""
     pass
+
+
+def update_marin_workflow(workflow_path: Path) -> bool:
+    """
+    Update a Marin workflow - add 'Marin - ' prefix to workflow name.
+
+    Returns:
+        True if the workflow was updated, False if no changes needed
+    """
+    doc = YAYA.load(workflow_path)
+
+    if "name" not in doc.data:
+        print(f"  ! Skipping {workflow_path.name} (no name field)")
+        return False
+
+    old_name = doc.data["name"]
+    if old_name.startswith("Marin - "):
+        print(f"  - {workflow_path.name}: already has prefix")
+        return False
+
+    new_name = f"Marin - {old_name}"
+
+    # Use replace_in_values for the name field
+    doc.replace_in_values(old_name, new_name)
+    doc.save()
+
+    print(f"  ✓ {workflow_path.name}: {old_name} -> {new_name}")
+    return True
 
 
 def update_levanter_workflow(workflow_path: Path) -> bool:
@@ -29,7 +57,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
     """
     print(f"  Processing {workflow_path.name}...")
 
-    doc = LosslessYAML.load(workflow_path)
+    doc = YAYA.load(workflow_path)
     modified = False
 
     # 1. Update workflow name
@@ -162,14 +190,22 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
                 pass
 
             # No defaults at all - add the whole thing
+            # Try to add after 'if' if it exists, otherwise after 'runs-on'
+            after_key = None
+            try:
+                doc.get_path(f"jobs.{job_name}.if")
+                after_key = "if"
+            except KeyError:
+                after_key = "runs-on"
+
             try:
                 doc.add_key_after(
-                    f"jobs.{job_name}.runs-on",
+                    f"jobs.{job_name}.{after_key}",
                     "defaults",
                     {"run": {"working-directory": "lib/levanter"}}
                 )
                 modified = True
-                print(f"    ✓ Added defaults.run.working-directory to {job_name}")
+                print(f"    ✓ Added defaults.run.working-directory to {job_name} (after {after_key})")
             except KeyError:
                 # No runs-on - this is unusual and should be flagged
                 raise WorkflowConflict(
@@ -246,18 +282,29 @@ def main():
         print(f"ERROR: Workflows directory not found: {workflows_dir}")
         sys.exit(1)
 
-    print("Updating Levanter workflows...")
+    print("Updating GitHub Actions workflows...")
     print(f"Working directory: {cwd}")
     print()
 
-    updated_count = 0
+    # Update Marin workflows
+    print("Updating Marin workflows:")
+    marin_count = 0
+    for pattern in ["marin-*.yaml", "marin-*.yml"]:
+        for workflow_path in sorted(workflows_dir.glob(pattern)):
+            if update_marin_workflow(workflow_path):
+                marin_count += 1
+    print()
+
+    # Update Levanter workflows
+    print("Updating Levanter workflows:")
+    levanter_count = 0
     error_count = 0
 
     for pattern in ["levanter-*.yaml", "levanter-*.yml"]:
         for workflow_path in sorted(workflows_dir.glob(pattern)):
             try:
                 if update_levanter_workflow(workflow_path):
-                    updated_count += 1
+                    levanter_count += 1
             except WorkflowConflict as e:
                 print(f"  ⚠️  CONFLICT: {e}")
                 error_count += 1
@@ -270,10 +317,12 @@ def main():
     if error_count > 0:
         print(f"⚠️  {error_count} conflicts detected - manual intervention needed")
         sys.exit(1)
-    elif updated_count > 0:
-        print(f"✓ Updated {updated_count} workflows!")
     else:
-        print("✓ All workflows already up to date!")
+        total = marin_count + levanter_count
+        if total > 0:
+            print(f"✓ Updated {total} workflows ({marin_count} Marin, {levanter_count} Levanter)!")
+        else:
+            print("✓ All workflows already up to date!")
 
 
 if __name__ == "__main__":
