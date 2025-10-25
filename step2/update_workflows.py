@@ -255,15 +255,21 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
     original_text = workflow_path.read_text()
     needs_uv_update = False
 
-    # Check if there are uv commands without --package
+    # Check if there are uv commands without --package or --frozen
     if "uv sync" in original_text and "uv sync --package levanter" not in original_text:
         needs_uv_update = True
     if "uv run" in original_text and "uv run --package levanter" not in original_text:
         needs_uv_update = True
+    if "uv sync" in original_text and "--frozen" not in original_text:
+        needs_uv_update = True
 
     if needs_uv_update:
+        # Add --package levanter to uv sync/run commands
         doc.replace_in_values_regex(r'\buv sync(?! --package)', 'uv sync --package levanter')
         doc.replace_in_values_regex(r'\buv run(?! --package)', 'uv run --package levanter')
+        # Add --frozen to uv sync commands (use lockfile, don't re-resolve)
+        # Handle both "uv sync --package levanter" and "uv sync --package levanter --dev"
+        doc.replace_in_values_regex(r'\buv sync --package levanter( --dev)?(?! --frozen)', r'uv sync --package levanter\1 --frozen')
         modified = True
         print(f"    ✓ Updated uv commands")
     elif "uv sync" in original_text or "uv run" in original_text:
