@@ -277,6 +277,7 @@ marin/
 - **uv**: Workspace and package management
 - **yaya**: YAML transformations (for workflow migrations)
   - Uses `insert_key_between()` API for safe ordered insertions
+  - Uses `replace_key()` with list indices for `.readthedocs.yaml` updates
   - Fixes GitHub Actions jinja2 expression handling
 - **tomlkit**: TOML transformations (preserves formatting)
 
