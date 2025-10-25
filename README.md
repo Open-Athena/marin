@@ -1,8 +1,6 @@
 # Marin + Levanter Workspace Migration
 
-This directory contains migration scripts for the [uv workspace migration plan][#1773].
-
-**Repository**: The workspace-migration scripts live in [Open-Athena/marin/tree/rw/wm][wm-branch], not the old Gist.
+This directory contains migration scripts for the "uv workspace migration plan" ([#1773]).
 
 ## Overview
 
@@ -18,7 +16,7 @@ This directory contains migration scripts for the [uv workspace migration plan][
   - Migrate workflows to monorepo structure
   - Draft PR: [#1723]
 
-- **Step 3 ✋**: Haliax integration (coming soon)
+- **Step 3 ⏸️**: Thalas (executor), Haliax, etc. (coming soon)
 
 ## Contents
 
@@ -34,7 +32,7 @@ This directory contains migration scripts for the [uv workspace migration plan][
   - [Files](#step-2-files)
   - [Testing](#step-2-testing)
   - [Result](#step-2-result)
-- [Step 3: Haliax Integration](#step-3)
+- [Step 3: Thalas and Beyond](#step-3)
 
 ---
 
@@ -250,9 +248,16 @@ marin/
 
 ---
 
-## Step 3: Haliax Integration <a id="step-3"></a>
+## Step 3: Thalas and Beyond <a id="step-3"></a>
 
 **Status**: Not yet implemented
+
+Future steps will add:
+- **lib/thalas/**: Executor code (factored out from Marin)
+- **lib/haliax/**: Named tensor library
+- Other workspace members as needed
+
+See [#1773] for full details on future steps.
 
 See the [uv workspace migration plan][#1773] for details.
 
@@ -275,8 +280,7 @@ marin/
 ### Dependencies
 
 - **uv**: Workspace and package management
-- **lossless-yaml** (v0.1.0+): YAML transformations (for workflow migrations)
-  - Published on PyPI as `lossless-yaml`, imported as `yaya`
+- **[lossless-yaml]** (a.k.a. [yaya]): YAML transformations (for workflow migrations)
   - Uses `insert_key_between()` API for safe ordered insertions
   - Uses `replace_key()` with list indices for `.readthedocs.yaml` updates
   - Fixes GitHub Actions jinja2 expression handling
@@ -304,8 +308,8 @@ Both step 1 and step 2 are designed to be:
 [#1773]: https://github.com/marin-community/marin/issues/1773
 [#1690]: https://github.com/marin-community/marin/pull/1690
 [#1723]: https://github.com/marin-community/marin/pull/1723
-[wm-branch]: https://github.com/Open-Athena/marin/tree/rw%2Fwm
 [yaya]: https://github.com/ryan-williams/yaya
+[lossless-yaml]: https://pypi.org/project/lossless-yaml/
 
 ### File Links
 
