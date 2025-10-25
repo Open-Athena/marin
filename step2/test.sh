@@ -17,6 +17,45 @@
 
 set -e
 
+# Show help
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    cat << 'EOF'
+Workspace Migration - Step 2 Test
+==================================
+
+Tests step2/main.sh by running it from a step-1 base and verifying the result.
+
+This creates a temporary test branch, runs step2/main.sh, and compares the
+resulting worktree against the reference (current HEAD by default).
+
+Usage:
+    ./workspace-migration/step2/test.sh [options] [reference] [levanter-ref]
+
+Options:
+    -L, --allow-lock-diffs    Allow uv.lock to differ (it's a derived artifact)
+    -l, --lock-ref REF        Use uv.lock from specified git ref (typically the reference)
+                              (saves 5-10 minutes by skipping uv lock resolution)
+    -h, --help                Show this help message
+
+Arguments:
+    reference                 Git ref to compare against (default: HEAD, can use branch name like ws-2)
+    levanter-ref              Git ref to use for Levanter (default: auto-detect from reference)
+
+Examples:
+    # Test against current branch (HEAD)
+    ./workspace-migration/step2/test.sh
+
+    # Test against ws-2 branch, reusing its lockfile (fast)
+    ./workspace-migration/step2/test.sh -l ws-2 ws-2
+
+    # Test against ws-2, allow lockfile to differ
+    ./workspace-migration/step2/test.sh -L ws-2
+
+See workspace-migration/README.md for more details.
+EOF
+    exit 0
+fi
+
 # Change to repo root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/../.."

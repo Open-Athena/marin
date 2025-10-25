@@ -17,6 +17,45 @@
 
 set -e
 
+# Show help
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+    cat << 'EOF'
+Workspace Migration - Step 2
+============================
+
+Merges Levanter (with preserved Git history) into workspace as lib/levanter/
+
+Usage:
+    ./workspace-migration/step2/main.sh [options] [levanter-repo-path] [levanter-ref]
+
+Prerequisites:
+    - Should be on ws branch (or branch with step 1 applied)
+    - Levanter repo cloned (default: ../levanter)
+
+Options:
+    -l, --lock-ref REF    Use uv.lock from specified git ref instead of re-resolving
+                          (saves 5-10 minutes during testing)
+    -h, --help            Show this help message
+
+Arguments:
+    levanter-repo-path    Path to Levanter repo (default: ../levanter)
+    levanter-ref          Git ref to use (default: HEAD from levanter-repo-path)
+
+Examples:
+    # Default: use ../levanter at HEAD, re-resolve lockfile
+    ./workspace-migration/step2/main.sh
+
+    # Use existing lockfile from ws-2 (faster for testing)
+    ./workspace-migration/step2/main.sh --lock-ref ws-2
+
+    # Use specific Levanter repo and ref
+    ./workspace-migration/step2/main.sh ~/path/to/levanter main
+
+See workspace-migration/README.md for more details.
+EOF
+    exit 0
+fi
+
 # Change to repo root
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/../.."
