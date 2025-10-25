@@ -270,8 +270,9 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         # Add --frozen to uv sync and uv run commands (use lockfile, don't re-resolve or update git deps)
         # Handle both "uv sync --package levanter" and "uv sync --package levanter --dev"
         doc.replace_in_values_regex(r'\buv sync --package levanter( --dev)?(?! --frozen)', r'uv sync --package levanter\1 --frozen')
-        # Add --frozen to uv run commands (handle optional --with flag)
-        doc.replace_in_values_regex(r'\buv run --package levanter( --with [^\s]+)?(?! --frozen)', r'uv run --package levanter\1 --frozen')
+        # Add --frozen to uv run commands (handle optional --with flag with quoted value)
+        # Match --with followed by either: quoted string (with spaces) or unquoted word
+        doc.replace_in_values_regex(r'\buv run --package levanter( --with (?:"[^"]+"|[^\s]+))?(?! --frozen)', r'uv run --package levanter --frozen\1')
         modified = True
         print(f"    ✓ Updated uv commands")
     elif "uv sync" in original_text or "uv run" in original_text:
