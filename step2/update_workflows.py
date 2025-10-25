@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["lossless-yaml @ file:///Users/ryan/c/yaya"]
+# dependencies = ["lossless-yaml==0.1.0"]
 # ///
 """
 Update GitHub Actions workflows for step 2 workspace migration.
