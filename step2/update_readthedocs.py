@@ -42,14 +42,14 @@ def main():
         # Add --frozen to uv sync
         if "uv sync" in cmd and "--frozen" not in cmd:
             new_cmd = cmd.replace("uv sync --package marin", "uv sync --package marin --frozen")
-            doc.set_path(f"build.commands[{i}]", new_cmd)
+            doc.replace_key(f"build.commands[{i}]", new_cmd)
             modified = True
             print(f"  ✓ Added --frozen to uv sync")
 
         # Add --frozen to uv run
         if "uv run" in cmd and "--frozen" not in cmd:
             new_cmd = cmd.replace("uv run ", "uv run --frozen ")
-            doc.set_path(f"build.commands[{i}]", new_cmd)
+            doc.replace_key(f"build.commands[{i}]", new_cmd)
             modified = True
             print(f"  ✓ Added --frozen to uv run")
 
