@@ -308,7 +308,7 @@ Both step 1 and step 2 are designed to be:
 [#1773]: https://github.com/marin-community/marin/issues/1773
 [#1690]: https://github.com/marin-community/marin/pull/1690
 [#1723]: https://github.com/marin-community/marin/pull/1723
-[yaya]: https://github.com/ryan-williams/yaya
+[yaya]: https://github.com/Open-Athena/yaya
 [lossless-yaml]: https://pypi.org/project/lossless-yaml/
 
 ### File Links
