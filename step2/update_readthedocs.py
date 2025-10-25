@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["yaya @ file:///Users/ryan/c/yaya"]
+# dependencies = ["lossless-yaml @ file:///Users/ryan/c/yaya"]
 # ///
 """
 Update .readthedocs.yaml for step 2 workspace migration.
