@@ -318,8 +318,12 @@ echo "Updating TPU setup scripts..."
 echo "Updating pre-commit config..."
 "$SCRIPT_DIR/update_precommit.py"
 
+# Update ReadTheDocs config to use --frozen
+echo "Updating ReadTheDocs config..."
+"$SCRIPT_DIR/update_readthedocs.py"
+
 # Commit workflow and TPU setup changes
-git add .github/ lib/levanter/infra/helpers/ .pre-commit-config.yaml
+git add .github/ lib/levanter/infra/helpers/ .pre-commit-config.yaml .readthedocs.yaml
 
 git commit -m "Migrate workflows to monorepo structure
 
@@ -330,11 +334,14 @@ git commit -m "Migrate workflows to monorepo structure
   - Add path filters to trigger only on relevant changes
   - Set working-directory: lib/levanter
   - Use --package levanter for uv commands
+  - Add --frozen to uv sync/run to prevent git dependency updates
   - Update TPU SSH commands to use marin/lib/levanter paths
 - Update TPU setup scripts for monorepo structure:
   - Clone marin monorepo instead of levanter repo
   - Use marin directory name instead of levanter
-  - Add --package levanter to uv sync commands
+  - Add --package levanter --frozen to uv sync commands
+- Update ReadTheDocs config:
+  - Add --frozen to uv sync and uv run commands
 - Exclude lib/levanter/ from Marin license insertion (preserve Levanter licenses)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
