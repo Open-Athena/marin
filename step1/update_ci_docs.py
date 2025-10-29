@@ -1,16 +1,25 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run
+# /// script
+# dependencies = ["lossless-yaml>=0.1.0"]
+# ///
 """
 Update CI/docs configs for workspace structure.
 
 Updates:
 - GHA workflows: Use workspace extra syntax (e.g., --extra=marin:cpu)
 - ReadTheDocs: Install marin package from lib/marin
-- mkdocs.yml: Update src/ paths to lib/marin/src/
-- CodeQL workflow: Update src paths to lib/marin/src
+- mkdocs.yml: Update src/ paths to lib/marin/src/ (using yaya for lossless updates)
+- CodeQL workflow: Update src paths to lib/marin/src (using yaya for lossless updates)
 """
 
 import re
 from pathlib import Path
+
+try:
+    from yaya import YAYA
+except ImportError:
+    print("ERROR: yaya (lossless-yaml) is required. Install with: pip install lossless-yaml")
+    raise
 
 
 def update_workflows():
@@ -137,60 +146,59 @@ def update_readthedocs():
 
 
 def update_mkdocs():
-    """Update mkdocs.yml to use workspace paths."""
+    """Update mkdocs.yml to use workspace paths using yaya for lossless updates."""
     print("Updating mkdocs.yml...")
 
     mkdocs_yml = Path('mkdocs.yml')
-    if mkdocs_yml.exists():
-        content = mkdocs_yml.read_text()
-
-        # Update watch paths: src/ -> lib/marin/src/
-        updated = re.sub(
-            r'^(\s+)- src/$',
-            r'\1- lib/marin/src/',
-            content,
-            flags=re.MULTILINE
-        )
-
-        # Update paths in mkdocstrings handler: [".", "src"] -> [".", "lib/marin/src"]
-        updated = re.sub(
-            r'paths: \["\."\, "src"\]',
-            'paths: [".", "lib/marin/src"]',
-            updated
-        )
-
-        if updated != content:
-            mkdocs_yml.write_text(updated)
-            print(f"  ✓ Updated {mkdocs_yml}")
-        else:
-            print(f"  - No changes needed in {mkdocs_yml}")
-    else:
+    if not mkdocs_yml.exists():
         print(f"  ⚠ {mkdocs_yml} not found")
+        return
+
+    doc = YAYA.load(mkdocs_yml)
+
+    # Check if src/ paths exist before attempting replacement
+    content_str = mkdocs_yml.read_text()
+    needs_update = 'src/' in content_str or '"src"' in content_str or "'src'" in content_str
+
+    if not needs_update:
+        print(f"  - No changes needed in {mkdocs_yml}")
+        return
+
+    # Use YAYA's replace_in_values_regex to update src -> lib/marin/src
+    # Use negative lookbehind to avoid matching src that's already in lib/marin/src
+    # Pattern: src (with optional trailing /) not preceded by lib/marin/
+    doc.replace_in_values_regex(r'(?<!lib/marin/)src(/)?', r'lib/marin/src\1')
+
+    doc.save()
+    print(f"  ✓ Updated src/ paths to lib/marin/src/ in {mkdocs_yml}")
 
 
 def update_codeql():
-    """Update CodeQL workflow to use workspace paths."""
+    """Update CodeQL workflow to use workspace paths using yaya for lossless updates."""
     print("Updating CodeQL workflow...")
 
     codeql_yml = Path('.github/workflows/codeql.yml')
-    if codeql_yml.exists():
-        content = codeql_yml.read_text()
-
-        # Update paths config: - src -> - lib/marin/src
-        updated = re.sub(
-            r'^(\s+)- src$',
-            r'\1- lib/marin/src',
-            content,
-            flags=re.MULTILINE
-        )
-
-        if updated != content:
-            codeql_yml.write_text(updated)
-            print(f"  ✓ Updated {codeql_yml}")
-        else:
-            print(f"  - No changes needed in {codeql_yml}")
-    else:
+    if not codeql_yml.exists():
         print(f"  - {codeql_yml} not found (may not exist yet)")
+        return
+
+    doc = YAYA.load(codeql_yml)
+
+    # Check if src paths exist in the config section
+    content_str = codeql_yml.read_text()
+    # Look for "- src" in paths section (not "- source" or similar)
+    needs_update = re.search(r'^\s+- src\s*$', content_str, re.MULTILINE) is not None
+
+    if not needs_update:
+        print(f"  - No changes needed in {codeql_yml}")
+        return
+
+    # Use YAYA's replace_in_values to update src -> lib/marin/src
+    # This preserves formatting while updating the path value
+    doc.replace_in_values('src', 'lib/marin/src')
+
+    doc.save()
+    print(f"  ✓ Updated src paths to lib/marin/src in {codeql_yml}")
 
 
 def main():
