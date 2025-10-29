@@ -5,6 +5,8 @@ Update CI/docs configs for workspace structure.
 Updates:
 - GHA workflows: Use workspace extra syntax (e.g., --extra=marin:cpu)
 - ReadTheDocs: Install marin package from lib/marin
+- mkdocs.yml: Update src/ paths to lib/marin/src/
+- CodeQL workflow: Update src paths to lib/marin/src
 """
 
 import re
@@ -134,6 +136,63 @@ def update_readthedocs():
         print(f"  ⚠ {rtd_config} not found")
 
 
+def update_mkdocs():
+    """Update mkdocs.yml to use workspace paths."""
+    print("Updating mkdocs.yml...")
+
+    mkdocs_yml = Path('mkdocs.yml')
+    if mkdocs_yml.exists():
+        content = mkdocs_yml.read_text()
+
+        # Update watch paths: src/ -> lib/marin/src/
+        updated = re.sub(
+            r'^(\s+)- src/$',
+            r'\1- lib/marin/src/',
+            content,
+            flags=re.MULTILINE
+        )
+
+        # Update paths in mkdocstrings handler: [".", "src"] -> [".", "lib/marin/src"]
+        updated = re.sub(
+            r'paths: \["\."\, "src"\]',
+            'paths: [".", "lib/marin/src"]',
+            updated
+        )
+
+        if updated != content:
+            mkdocs_yml.write_text(updated)
+            print(f"  ✓ Updated {mkdocs_yml}")
+        else:
+            print(f"  - No changes needed in {mkdocs_yml}")
+    else:
+        print(f"  ⚠ {mkdocs_yml} not found")
+
+
+def update_codeql():
+    """Update CodeQL workflow to use workspace paths."""
+    print("Updating CodeQL workflow...")
+
+    codeql_yml = Path('.github/workflows/codeql.yml')
+    if codeql_yml.exists():
+        content = codeql_yml.read_text()
+
+        # Update paths config: - src -> - lib/marin/src
+        updated = re.sub(
+            r'^(\s+)- src$',
+            r'\1- lib/marin/src',
+            content,
+            flags=re.MULTILINE
+        )
+
+        if updated != content:
+            codeql_yml.write_text(updated)
+            print(f"  ✓ Updated {codeql_yml}")
+        else:
+            print(f"  - No changes needed in {codeql_yml}")
+    else:
+        print(f"  - {codeql_yml} not found (may not exist yet)")
+
+
 def main():
     """Update CI and docs configurations."""
     print("\n" + "="*60)
@@ -142,6 +201,8 @@ def main():
 
     update_workflows()
     update_readthedocs()
+    update_mkdocs()
+    update_codeql()
 
     print("\n✓ CI/docs configs updated!")
 
