@@ -31,6 +31,7 @@ def update_marin_workflow(workflow_path: Path) -> bool:
     # Whitelist of expected Marin workflows from ws branch (step 1)
     EXPECTED_MARIN_WORKFLOWS = {
         "marin-build-docker-images.yaml",
+        "marin-codeql.yml",
         "marin-docs.yaml",
         "marin-lint-and-format.yaml",
         "marin-metrics.yaml",
