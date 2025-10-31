@@ -104,11 +104,9 @@ def update_levanter_rtd(rtd_yaml: Path) -> bool:
         "cd lib/levanter && uv run --frozen mkdocs build --strict --site-dir $READTHEDOCS_OUTPUT/html",
     ]
 
-    # Insert commands after build.tools
-    doc.insert_key_between(
-        "build",
-        prev_key="tools",
-        next_key=None,  # Add at end
+    # Add commands after build.tools
+    doc.add_key_after(
+        existing_path="build.tools",
         new_key="commands",
         value=commands,
     )
