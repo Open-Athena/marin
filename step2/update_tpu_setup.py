@@ -90,21 +90,30 @@ def update_tpu_setup_script(script_path: Path) -> bool:
         )
         print(f"    ✓ Updated uv sync to use --package levanter")
 
-    # 5. Add --frozen to uv sync commands
+    # 5. Add --group test to uv sync for test dependencies (pytest, etc.)
+    if 'uv sync' in modified and '--group test' not in modified:
+        modified = re.sub(
+            r'uv sync --package levanter --extra tpu(?! --group)',
+            r'uv sync --package levanter --extra tpu --group test',
+            modified
+        )
+        print(f"    ✓ Added --group test to uv sync")
+
+    # 6. Add --frozen to uv sync commands
     if 'uv sync' in modified and '--frozen' not in modified:
         modified = re.sub(
-            r'uv sync --package levanter --extra tpu(?! --frozen)',
-            r'uv sync --package levanter --extra tpu --frozen',
+            r'uv sync --package levanter --extra tpu --group test(?! --frozen)',
+            r'uv sync --package levanter --extra tpu --group test --frozen',
             modified
         )
         print(f"    ✓ Added --frozen to uv sync")
 
-    # 6. Add venv_path.txt creation for run.sh to find venv
+    # 7. Add venv_path.txt creation for run.sh to find venv
     if 'venv_path.txt' not in modified:
         # Add after uv sync command
         venv_path_line = '\n# Create venv_path.txt so run.sh can find the venv at monorepo root\necho "$(pwd)/.venv" > lib/levanter/infra/venv_path.txt'
         modified = re.sub(
-            r'(uv sync --package levanter --extra tpu --frozen\n)',
+            r'(uv sync --package levanter --extra tpu --group test --frozen\n)',
             r'\1' + venv_path_line + '\n',
             modified
         )
