@@ -1,8 +1,9 @@
-#!/usr/bin/env python3
-# Use local yaya for delete_key support (not yet in PyPI release)
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path.home() / "c/yaya/src"))
+#!/usr/bin/env -S uv run
+# /// script
+# dependencies = [
+#   "lossless-yaml @ git+https://github.com/ryan-williams/yaya.git@rw/del",
+# ]
+# ///
 """
 Update .readthedocs.yaml files for step 2 workspace migration.
 
