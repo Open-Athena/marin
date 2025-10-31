@@ -90,11 +90,8 @@ def update_levanter_rtd(rtd_yaml: Path) -> bool:
         return False
 
     # Replace with workspace-aware build
-    # Remove old keys
-    if has_mkdocs:
-        doc.delete_key("mkdocs")
-    if has_python:
-        doc.delete_key("python")
+    # We can't delete keys in YAYA, but we can replace the entire build section
+    # The old mkdocs/python keys will be replaced by the commands approach
 
     # Add commands section
     commands = [
