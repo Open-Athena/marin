@@ -68,15 +68,27 @@ def main():
     )
 
     # Step 2: Move files to lib/marin structure
-    run_command(
-        """
-        mkdir -p lib/marin &&
-        git mv src lib/marin/ &&
-        git mv marin/tools lib/marin/ &&
-        rmdir marin
-        """,
-        "Step 2: Move marin code to lib/marin/"
-    )
+    # Check if already moved
+    if Path("lib/marin/src").exists() and not Path("src").exists():
+        print("\n" + "="*60)
+        print("Step 2: Move marin code to lib/marin/")
+        print("="*60)
+        print("  → lib/marin/src already exists, skipping move\n")
+    else:
+        # Clean up partial migration if needed
+        if Path("lib/marin").exists():
+            print("\n  → Cleaning up partial lib/marin structure")
+            subprocess.run("rm -rf lib/marin", shell=True, check=True)
+
+        run_command(
+            """
+            mkdir -p lib/marin &&
+            git mv src lib/marin/ &&
+            git mv marin/tools lib/marin/ &&
+            rmdir marin
+            """,
+            "Step 2: Move marin code to lib/marin/"
+        )
 
     # Step 3: Transform pyproject.toml files
     script_dir = Path(__file__).parent
