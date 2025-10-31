@@ -355,7 +355,8 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
 
         if needs_ssh_update:
             # Update SSH command paths to marin/lib/levanter/...
-            doc.replace_in_values_regex(r'\blevanter/(tests|infra)\b', r'marin/lib/levanter/\1')
+            # Use negative lookbehind to avoid matching lib/levanter/ (from script path updates)
+            doc.replace_in_values_regex(r'(?<!lib/)levanter/(tests|infra)\b', r'marin/lib/levanter/\1')
             modified = True
             print(f"    ✓ Updated SSH paths: levanter/ -> marin/lib/levanter/")
 
