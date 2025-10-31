@@ -218,7 +218,18 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
             )
 
     # 3. Add defaults.run.working-directory with better conflict handling
+    # EXCEPTION: TPU workflows should NOT have working-directory because they:
+    # - Run infra scripts relative to repo root
+    # - SSH into VMs that clone the full repo
+    # - Reference paths from repo root in SSH commands
+    is_tpu_workflow = "tpu" in workflow_path.name.lower()
+
     for job_name, job in doc["jobs"].items():
+        # Skip adding working-directory for TPU workflows
+        if is_tpu_workflow:
+            print(f"    - Skipping working-directory for TPU workflow")
+            continue
+
         try:
             # Check if working-directory is already set correctly
             existing_wd = doc.get_path(f"jobs.{job_name}.defaults.run.working-directory")
@@ -328,18 +339,29 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
     elif "uv sync" in original_text or "uv run" in original_text:
         print(f"    - uv commands already have --package")
 
-    # 6. Update TPU SSH paths - check if actually needed
-    if "tpu" in workflow_path.name.lower():
-        needs_path_update = (
-            "levanter/tests" in original_text or
-            "levanter/infra" in original_text
-        )
+    # 6. Update TPU workflow paths
+    # TPU workflows run from repo root (no working-directory), so they need:
+    # - Script paths: lib/levanter/infra/... (for bash commands)
+    # - SSH paths: marin/lib/levanter/... (for commands on TPU VM)
+    if is_tpu_workflow:
+        needs_script_update = "infra/spin-up-vm.sh" in original_text or "infra/helpers/" in original_text
+        needs_ssh_update = "levanter/tests" in original_text or "levanter/infra" in original_text
 
-        if needs_path_update:
+        if needs_script_update:
+            # Update script paths to lib/levanter/infra/...
+            doc.replace_in_values_regex(r'\binfra/(spin-up-vm\.sh|helpers/[^\s]+)', r'lib/levanter/infra/\1')
+            modified = True
+            print(f"    ✓ Updated script paths: infra/ -> lib/levanter/infra/")
+
+        if needs_ssh_update:
+            # Update SSH command paths to marin/lib/levanter/...
             doc.replace_in_values_regex(r'\blevanter/(tests|infra)\b', r'marin/lib/levanter/\1')
             modified = True
             print(f"    ✓ Updated SSH paths: levanter/ -> marin/lib/levanter/")
-        elif "marin/lib/levanter" in original_text:
+
+        if not needs_script_update and "lib/levanter/infra" in original_text:
+            print(f"    - Script paths already updated")
+        if not needs_ssh_update and "marin/lib/levanter" in original_text:
             print(f"    - SSH paths already updated")
 
     if modified:
