@@ -145,12 +145,15 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
             pr_value = on_value["pull_request"]
             if pr_value is None:
                 # Simple 'pull_request:' trigger - expand it with path filters
-                doc.replace_key_path("on.pull_request", {
+                # Can't use replace_key_path (doesn't exist), so reconstruct the whole 'on' dict
+                new_on = dict(on_value)
+                new_on["pull_request"] = {
                     "paths": [
                         "lib/levanter/**",
                         ".github/workflows/" + workflow_path.name
                     ]
-                })
+                }
+                doc.replace_key("on", new_on)
                 modified = True
                 print(f"    ✓ Added path filters to pull_request trigger")
             elif isinstance(pr_value, dict):
