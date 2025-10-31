@@ -118,7 +118,7 @@ if [ -z "$LEVANTER_REF" ]; then
     fi
 
     # Extract SHA from git URL: "levanter[...] @ git+https://...@<SHA>"
-    PINNED_SHA=$(grep -o 'levanter.*@git+https://[^@]*@[a-f0-9]\{40\}' "$PYPROJECT" | grep -o '[a-f0-9]\{40\}$' || true)
+    PINNED_SHA=$(grep -o 'levanter.*@git+https://[^@]*@[a-f0-9]\{40\}' "$PYPROJECT" | grep -o '[a-f0-9]\{40\}' || true)
 
     if [ -n "$PINNED_SHA" ]; then
         LEVANTER_REF="$PINNED_SHA"
