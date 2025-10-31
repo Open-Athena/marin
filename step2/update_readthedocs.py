@@ -3,10 +3,11 @@
 # dependencies = ["lossless-yaml==0.1.0"]
 # ///
 """
-Update .readthedocs.yaml for step 2 workspace migration.
+Update .readthedocs.yaml files for step 2 workspace migration.
 
-Adds --frozen flags to uv sync and uv run commands to prevent git
-dependency updates during ReadTheDocs builds.
+Updates both root (Marin) and lib/levanter/ (Levanter) ReadTheDocs configs:
+- Marin: Adds --frozen flags to uv commands
+- Levanter: Converts to workspace-aware build using uv from root
 """
 
 import sys
@@ -14,23 +15,16 @@ from pathlib import Path
 from yaya import YAYA
 
 
-def main():
-    """Update .readthedocs.yaml with --frozen flags."""
-    cwd = Path.cwd()
-    rtd_yaml = cwd / ".readthedocs.yaml"
-
-    if not rtd_yaml.exists():
-        print(f"! .readthedocs.yaml not found at {rtd_yaml}")
-        return
-
-    print("Updating .readthedocs.yaml...")
+def update_marin_rtd(rtd_yaml: Path) -> bool:
+    """Update root .readthedocs.yaml (Marin docs) with --frozen flags."""
+    print("Updating .readthedocs.yaml (Marin docs)...")
     doc = YAYA.load(rtd_yaml)
 
     # Get the commands list
     commands = doc.get_path("build.commands")
     if not commands or not isinstance(commands, list):
         print("  ! No build.commands found")
-        return
+        return False
 
     modified = False
 
@@ -58,6 +52,94 @@ def main():
         print("✓ .readthedocs.yaml updated!")
     else:
         print("  - Already has --frozen flags")
+
+    return modified
+
+
+def update_levanter_rtd(rtd_yaml: Path) -> bool:
+    """Update lib/levanter/.readthedocs.yaml for workspace structure."""
+    print("\nUpdating lib/levanter/.readthedocs.yaml (Levanter docs)...")
+    doc = YAYA.load(rtd_yaml)
+
+    # Check if already converted to commands-based build
+    try:
+        commands = doc.get_path("build.commands")
+        if commands:
+            print("  - Already using commands-based build")
+            return False
+    except KeyError:
+        pass
+
+    # Check for old-style config
+    has_mkdocs = False
+    has_python = False
+    try:
+        doc.get_path("mkdocs")
+        has_mkdocs = True
+    except KeyError:
+        pass
+
+    try:
+        doc.get_path("python")
+        has_python = True
+    except KeyError:
+        pass
+
+    if not (has_mkdocs or has_python):
+        print("  ! Unexpected config structure")
+        return False
+
+    # Replace with workspace-aware build
+    # Remove old keys
+    if has_mkdocs:
+        doc.delete_key("mkdocs")
+    if has_python:
+        doc.delete_key("python")
+
+    # Add commands section
+    commands = [
+        "# Install uv and sync levanter package from workspace root",
+        "pip install uv",
+        "cd $READTHEDOCS_CHECKOUT && uv sync --package levanter --frozen",
+        "# Install mkdocs dependencies",
+        "uv pip install mkdocs mkdocstrings mkdocstrings-python mkdocs-material mkdocs-material-extensions mkdocs-autorefs mkdocs-include-markdown-plugin mkdocs-literate-nav mkdocs-macros-plugin",
+        "# Build docs from lib/levanter/ subdirectory",
+        "cd lib/levanter && uv run --frozen mkdocs build --strict --site-dir $READTHEDOCS_OUTPUT/html",
+    ]
+
+    # Insert commands after build.tools
+    doc.insert_key_between(
+        "build",
+        prev_key="tools",
+        next_key=None,  # Add at end
+        new_key="commands",
+        value=commands,
+    )
+
+    doc.save()
+    print("  ✓ Converted to workspace-aware build")
+    print("  ✓ Added uv sync --package levanter --frozen")
+    print("  ✓ Added mkdocs build from lib/levanter/")
+    return True
+
+
+def main():
+    """Update ReadTheDocs configs for workspace."""
+    cwd = Path.cwd()
+
+    # Update Marin RTD config
+    marin_rtd = cwd / ".readthedocs.yaml"
+    if marin_rtd.exists():
+        update_marin_rtd(marin_rtd)
+    else:
+        print(f"! .readthedocs.yaml not found at {marin_rtd}")
+
+    # Update Levanter RTD config
+    levanter_rtd = cwd / "lib/levanter/.readthedocs.yaml"
+    if levanter_rtd.exists():
+        update_levanter_rtd(levanter_rtd)
+    else:
+        print(f"! lib/levanter/.readthedocs.yaml not found at {levanter_rtd}")
 
 
 if __name__ == "__main__":
