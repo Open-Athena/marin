@@ -104,11 +104,32 @@ if [ ! -d "$LEVANTER_REPO/.git" ]; then
     exit 1
 fi
 
-# If no levanter ref specified, use whatever HEAD is in the levanter repo
+# If no levanter ref specified, try to extract from marin's pinned SHA
 if [ -z "$LEVANTER_REF" ]; then
-    LEVANTER_REF=$(git -C "$LEVANTER_REPO" rev-parse HEAD)
-    echo "No Levanter ref specified, using HEAD from $LEVANTER_REPO: $LEVANTER_REF"
-    echo ""
+    # Try to extract pinned Levanter SHA from lib/marin/pyproject.toml (workspace structure)
+    # or pyproject.toml (pre-workspace structure)
+    if [ -f "lib/marin/pyproject.toml" ]; then
+        PYPROJECT="lib/marin/pyproject.toml"
+    elif [ -f "pyproject.toml" ]; then
+        PYPROJECT="pyproject.toml"
+    else
+        echo "ERROR: Cannot find pyproject.toml to extract Levanter SHA"
+        exit 1
+    fi
+
+    # Extract SHA from git URL: "levanter[...] @ git+https://...@<SHA>"
+    PINNED_SHA=$(grep -o 'levanter.*@git+https://[^@]*@[a-f0-9]\{40\}' "$PYPROJECT" | grep -o '[a-f0-9]\{40\}$' || true)
+
+    if [ -n "$PINNED_SHA" ]; then
+        LEVANTER_REF="$PINNED_SHA"
+        echo "Using pinned Levanter SHA from $PYPROJECT: $LEVANTER_REF"
+        echo ""
+    else
+        # Fall back to HEAD if no pinned SHA found
+        LEVANTER_REF=$(git -C "$LEVANTER_REPO" rev-parse HEAD)
+        echo "No pinned Levanter SHA found in $PYPROJECT, using HEAD from $LEVANTER_REPO: $LEVANTER_REF"
+        echo ""
+    fi
 fi
 
 # Clean up lib/levanter if it only contains untracked files
