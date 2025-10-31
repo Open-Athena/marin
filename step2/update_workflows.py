@@ -90,6 +90,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
     # 2. Expand trigger with path filters - with conflict detection
     # Assert exact expected trigger for each workflow from Levanter 95ab586e2
     # Map workflow name (without levanter- prefix) to expected trigger
+    # Special handling: tpu_unit_tests.yaml has workflow_dispatch in addition to pull_request
     EXPECTED_TRIGGERS = {
         "check_lockfile.yaml": ["push", "pull_request"],
         "docker-base-image.yaml": "workflow_run",
@@ -101,7 +102,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         "run_pre_commit.yaml": ["push", "pull_request"],
         "run_ray_tests.yaml": ["push"],
         "run_tests.yaml": ["push", "pull_request"],
-        "tpu_unit_tests.yaml": ["pull_request"],
+        "tpu_unit_tests.yaml": {"pull_request", "workflow_dispatch"},  # Has both triggers
     }
 
     # Get workflow basename without levanter- prefix
@@ -124,6 +125,51 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
             raise WorkflowConflict(
                 f"{workflow_path.name}: Expected workflow_run trigger, got: {on_value}"
             )
+    elif isinstance(expected_trigger, set):
+        # Handle workflows with multiple trigger types (e.g., pull_request + workflow_dispatch)
+        # We add path filters only to pull_request, leave others alone
+        if not isinstance(on_value, dict):
+            raise WorkflowConflict(
+                f"{workflow_path.name}: Expected dict with triggers {expected_trigger}, got: {on_value}"
+            )
+
+        # Check that we have the expected triggers
+        actual_triggers = set(on_value.keys())
+        if actual_triggers != expected_trigger:
+            raise WorkflowConflict(
+                f"{workflow_path.name}: Expected triggers {expected_trigger}, got: {actual_triggers}"
+            )
+
+        # Add path filters to pull_request if present
+        if "pull_request" in on_value:
+            pr_value = on_value["pull_request"]
+            if pr_value is None:
+                # Simple 'pull_request:' trigger - expand it with path filters
+                doc.replace_key_path("on.pull_request", {
+                    "paths": [
+                        "lib/levanter/**",
+                        ".github/workflows/" + workflow_path.name
+                    ]
+                })
+                modified = True
+                print(f"    ✓ Added path filters to pull_request trigger")
+            elif isinstance(pr_value, dict):
+                # Already a dict - check if it has our paths
+                existing_paths = pr_value.get("paths", [])
+                if "lib/levanter/**" in existing_paths:
+                    print(f"    - pull_request trigger already has path filters")
+                else:
+                    raise WorkflowConflict(
+                        f"{workflow_path.name}: pull_request has unexpected paths: {existing_paths}"
+                    )
+            else:
+                raise WorkflowConflict(
+                    f"{workflow_path.name}: Unexpected pull_request value: {pr_value}"
+                )
+
+        # Leave other triggers (like workflow_dispatch) untouched
+        print(f"    - Preserving other triggers: {actual_triggers - {'pull_request'}}")
+
     elif isinstance(expected_trigger, list):
         # Assert exact list match, then add path filters
         if on_value == expected_trigger:
