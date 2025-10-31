@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run
 # /// script
 # dependencies = [
-#   "lossless-yaml @ git+https://github.com/ryan-williams/yaya.git@rw/del",
+#   "lossless-yaml @ git+https://github.com/Open-Athena/yaya.git@rw/del",
 # ]
 # ///
 """
