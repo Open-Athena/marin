@@ -94,12 +94,14 @@ def update_levanter_rtd(rtd_yaml: Path) -> bool:
     # The old mkdocs/python keys will be replaced by the commands approach
 
     # Add commands section
+    # Note: We install from docs/requirements.txt to pick up any upstream changes
+    # to mkdocs plugins/dependencies automatically
     commands = [
         "# Install uv and sync levanter package from workspace root",
         "pip install uv",
         "cd $READTHEDOCS_CHECKOUT && uv sync --package levanter --frozen",
-        "# Install mkdocs dependencies",
-        "uv pip install mkdocs mkdocstrings mkdocstrings-python mkdocs-material mkdocs-material-extensions mkdocs-autorefs mkdocs-include-markdown-plugin mkdocs-literate-nav mkdocs-macros-plugin",
+        "# Install mkdocs dependencies from Levanter's requirements",
+        "uv pip install -r lib/levanter/docs/requirements.txt",
         "# Build docs from lib/levanter/ subdirectory",
         "cd lib/levanter && uv run --frozen mkdocs build --strict --site-dir $READTHEDOCS_OUTPUT/html",
     ]
