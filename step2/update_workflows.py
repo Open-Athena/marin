@@ -88,9 +88,9 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
             print(f"    ✓ Updated name: {old_name} -> {new_name}")
 
     # 2. Expand trigger with path filters - with conflict detection
-    # Assert exact expected trigger for each workflow from Levanter 95ab586e2
+    # Assert exact expected trigger for each workflow from pinned Levanter c30de5b9a
     # Map workflow name (without levanter- prefix) to expected trigger
-    # Special handling: tpu_unit_tests.yaml has workflow_dispatch in addition to pull_request
+    # Note: tpu_unit_tests.yaml gained workflow_dispatch in 07372de8, but c30de5b9 only has pull_request
     EXPECTED_TRIGGERS = {
         "check_lockfile.yaml": ["push", "pull_request"],
         "docker-base-image.yaml": "workflow_run",
@@ -102,7 +102,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         "run_pre_commit.yaml": ["push", "pull_request"],
         "run_ray_tests.yaml": ["push"],
         "run_tests.yaml": ["push", "pull_request"],
-        "tpu_unit_tests.yaml": {"pull_request", "workflow_dispatch"},  # Has both triggers
+        "tpu_unit_tests.yaml": ["pull_request"],  # Only pull_request in c30de5b9 (workflow_dispatch added in 07372de8)
     }
 
     # Get workflow basename without levanter- prefix
