@@ -1,7 +1,8 @@
-#!/usr/bin/env -S uv run
-# /// script
-# dependencies = ["lossless-yaml==0.1.0"]
-# ///
+#!/usr/bin/env python3
+# Use local yaya for delete_key support (not yet in PyPI release)
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.home() / "c/yaya/src"))
 """
 Update .readthedocs.yaml files for step 2 workspace migration.
 
@@ -90,8 +91,13 @@ def update_levanter_rtd(rtd_yaml: Path) -> bool:
         return False
 
     # Replace with workspace-aware build
-    # We can't delete keys in YAYA, but we can replace the entire build section
-    # The old mkdocs/python keys will be replaced by the commands approach
+    # Delete old mkdocs and python keys since they're replaced by commands
+    if has_mkdocs:
+        doc.delete_key("mkdocs")
+        print("  ✓ Removed old mkdocs config")
+    if has_python:
+        doc.delete_key("python")
+        print("  ✓ Removed old python config")
 
     # Add commands section
     # Note: We install from docs/requirements.txt to pick up any upstream changes
