@@ -101,7 +101,7 @@ def update_levanter_workflow(workflow_path: Path) -> bool:
         "run_pre_commit.yaml": ["push", "pull_request"],
         "run_ray_tests.yaml": ["push"],
         "run_tests.yaml": ["push", "pull_request"],
-        "tpu_unit_tests.yaml": ["pull_request"],
+        "tpu_unit_tests.yaml": {"pull_request", "workflow_dispatch"},  # Has both triggers (workflow_dispatch has inputs)
     }
 
     # Get workflow basename without levanter- prefix
