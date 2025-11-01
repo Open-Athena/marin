@@ -1,8 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = [
-#   "lossless-yaml @ git+https://github.com/Open-Athena/yaya.git@rw/del",
-# ]
+# dependencies = ["lossless-yaml==0.2.0"]
 # ///
 """
 Update .readthedocs.yaml files for step 2 workspace migration.
