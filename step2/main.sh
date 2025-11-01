@@ -4,6 +4,9 @@
 # Hermetic script that merges Levanter (with preserved Git history) into workspace as lib/levanter/
 # Run from repo root: ./workspace-migration/step-2.sh [options] [levanter-repo-path] [levanter-ref]
 #
+# Expected Levanter SHA: 63a3b1cada45ffb15b741ed5555fb0bc75a56e3f
+#   (includes JAX 0.6.2 test fixes, pre-commit fixes, and trackio>=0.5.0 pin)
+#
 # Prerequisites:
 #   - Should be on ws branch (or branch with step 1 applied)
 #   - Levanter repo cloned (default: ../levanter)
@@ -126,9 +129,10 @@ if [ -z "$LEVANTER_REF" ]; then
         echo "Using pinned Levanter SHA from $PYPROJECT: $LEVANTER_REF"
         echo ""
     else
-        # Fall back to HEAD if no pinned SHA found
-        LEVANTER_REF=$(git -C "$LEVANTER_REPO" rev-parse HEAD)
-        echo "No pinned Levanter SHA found in $PYPROJECT, using HEAD from $LEVANTER_REPO: $LEVANTER_REF"
+        # Default to expected SHA (includes JAX 0.6.2 fixes, pre-commit fixes, trackio pin)
+        LEVANTER_REF="63a3b1cada45ffb15b741ed5555fb0bc75a56e3f"
+        echo "No pinned Levanter SHA found in $PYPROJECT, using default: $LEVANTER_REF"
+        echo "(This SHA includes JAX 0.6.2 test fixes, pre-commit fixes, and trackio>=0.5.0 pin)"
         echo ""
     fi
 fi
