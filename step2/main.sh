@@ -384,7 +384,7 @@ echo "Updating ReadTheDocs config..."
 "$SCRIPT_DIR/update_readthedocs.py"
 
 # Commit workflow and TPU setup changes
-git add .github/ lib/levanter/infra/helpers/ .pre-commit-config.yaml .readthedocs.yaml
+git add .github/ lib/levanter/infra/helpers/ .pre-commit-config.yaml .readthedocs.yaml lib/levanter/.readthedocs.yaml
 
 git commit -m "Migrate workflows to monorepo structure
 

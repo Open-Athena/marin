@@ -9,7 +9,7 @@ Updates:
 1. Root pyproject.toml: Add levanter to workspace members and sources
 2. lib/marin/pyproject.toml:
    - Change levanter dependency from git URL to workspace
-   - Pin dolma dependency to SHA c209094 (for tokenizers 0.21-0.22 compat)
+   - Preserve existing dolma dependency (don't modify SHA)
 """
 
 from pathlib import Path
@@ -101,9 +101,6 @@ def update_marin_pyproject(path: Path = Path("lib/marin/pyproject.toml")) -> Non
     if not updated:
         print("  - levanter dependency already uses workspace or not found")
 
-    # Update dolma dependency to pin to specific SHA with tokenizers 0.21-0.22 support
-    # c209094: "Relax tokenizers constraint to support 0.21-0.22"
-    DOLMA_SHA = "c209094"
     quality_dedup_deps = None
     if "project" in doc:
         project = doc["project"]
@@ -112,26 +109,14 @@ def update_marin_pyproject(path: Path = Path("lib/marin/pyproject.toml")) -> Non
             if "quality_dedup_consolidate" in opt_deps:
                 quality_dedup_deps = opt_deps["quality_dedup_consolidate"]
 
-    dolma_updated = False
     if quality_dedup_deps is not None:
-        for i, dep in enumerate(quality_dedup_deps):
-            if isinstance(dep, str) and dep.startswith("dolma @"):
-                # Check if it doesn't already have the SHA
-                if f"@{DOLMA_SHA}" not in dep:
-                    # Pin to specific SHA
-                    quality_dedup_deps[i] = f"dolma @ git+https://github.com/marin-community/dolma@{DOLMA_SHA}"
-                    dolma_updated = True
-                    print(f"  ✓ Updated dolma dependency to use SHA {DOLMA_SHA}")
-                    break
-
-        if not dolma_updated:
-            # Check if it's already pinned to this SHA
-            for dep in quality_dedup_deps:
-                if isinstance(dep, str) and "dolma @" in dep and f"@{DOLMA_SHA}" in dep:
-                    print(f"  - dolma already pinned to SHA {DOLMA_SHA}")
-                    break
-            else:
-                print("  - dolma dependency not found in quality-dedup-consolidate")
+        # Just verify dolma is present - don't modify it
+        for dep in quality_dedup_deps:
+            if isinstance(dep, str) and "dolma @" in dep:
+                print(f"  - dolma dependency preserved as-is: {dep}")
+                break
+        else:
+            print("  ⚠ dolma dependency not found in quality-dedup-consolidate")
     else:
         print("  - quality-dedup-consolidate section not found in pyproject.toml")
 
