@@ -1,6 +1,6 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["tomlkit"]
+# dependencies = ["tomlkit", "click"]
 # ///
 """
 Update workspace TOML files for step 2.
@@ -9,11 +9,13 @@ Updates:
 1. Root pyproject.toml: Add levanter to workspace members and sources
 2. lib/marin/pyproject.toml:
    - Change levanter dependency from git URL to workspace
-   - Preserve existing dolma dependency (don't modify SHA)
+   - Optionally update dolma dependency SHA
 """
 
+import sys
 from pathlib import Path
 
+import click
 import tomlkit
 
 
@@ -77,7 +79,7 @@ def update_root_pyproject(path: Path = Path("pyproject.toml")) -> None:
     print(f"  ✓ Updated {path}")
 
 
-def update_marin_pyproject(path: Path = Path("lib/marin/pyproject.toml")) -> None:
+def update_marin_pyproject(path: Path = Path("lib/marin/pyproject.toml"), dolma_sha: str | None = None) -> None:
     """Update lib/marin/pyproject.toml to use workspace levanter dependency."""
     print(f"Updating {path}...")
 
@@ -101,6 +103,7 @@ def update_marin_pyproject(path: Path = Path("lib/marin/pyproject.toml")) -> Non
     if not updated:
         print("  - levanter dependency already uses workspace or not found")
 
+    # Handle dolma dependency
     quality_dedup_deps = None
     if "project" in doc:
         project = doc["project"]
@@ -110,12 +113,21 @@ def update_marin_pyproject(path: Path = Path("lib/marin/pyproject.toml")) -> Non
                 quality_dedup_deps = opt_deps["quality_dedup_consolidate"]
 
     if quality_dedup_deps is not None:
-        # Just verify dolma is present - don't modify it
-        for dep in quality_dedup_deps:
+        dolma_updated = False
+        for i, dep in enumerate(quality_dedup_deps):
             if isinstance(dep, str) and "dolma @" in dep:
-                print(f"  - dolma dependency preserved as-is: {dep}")
+                if dolma_sha:
+                    # Update dolma SHA
+                    new_dep = f"dolma @ git+https://github.com/marin-community/dolma@{dolma_sha}"
+                    quality_dedup_deps[i] = new_dep
+                    print(f"  ✓ Updated dolma SHA to {dolma_sha}")
+                    dolma_updated = True
+                else:
+                    print(f"  - dolma dependency preserved as-is: {dep}")
+                    dolma_updated = True
                 break
-        else:
+
+        if not dolma_updated:
             print("  ⚠ dolma dependency not found in quality-dedup-consolidate")
     else:
         print("  - quality-dedup-consolidate section not found in pyproject.toml")
@@ -131,11 +143,14 @@ def update_marin_pyproject(path: Path = Path("lib/marin/pyproject.toml")) -> Non
     print(f"  ✓ Updated {path}")
 
 
-def main():
+@click.command()
+@click.option(
+    "--dolma-sha",
+    "-D",
+    help="dolma SHA to use (optional - if not provided, preserves existing)",
+)
+def main(dolma_sha: str | None):
     """Update workspace TOML files."""
-    import sys
-    import os
-
     # Use current directory (assumes script is run from repo root)
     # Script is designed to be called from step2/main.sh which is already in repo root
     cwd = Path.cwd()
@@ -146,7 +161,7 @@ def main():
 
     update_root_pyproject(cwd / "pyproject.toml")
     print()
-    update_marin_pyproject(cwd / "lib/marin/pyproject.toml")
+    update_marin_pyproject(cwd / "lib/marin/pyproject.toml", dolma_sha=dolma_sha)
     print()
     print("✓ All TOML files updated!")
 
