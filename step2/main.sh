@@ -4,18 +4,17 @@
 # Hermetic script that merges Levanter (with preserved Git history) into workspace as lib/levanter/
 # Run from repo root: ./workspace-migration/step2/main.sh [options]
 #
-# Expected Levanter SHA: 63a3b1cada45ffb15b741ed5555fb0bc75a56e3f
-#   (includes JAX 0.6.2 test fixes, pre-commit fixes, and trackio>=0.5.0 pin)
-# Expected dolma SHA: fd431d014d9d049b01e5f28bb1d1217a63919691
-#   (compatible with transformers>=4.57.1 via tokenizers>=0.22)
+# Process:
+#   1. Extract Levanter and dolma SHAs from lib/marin/pyproject.toml
+#   2. Merge Levanter with preserved history into lib/levanter/
+#
+# Note: Assumes step1 has already applied dependency updates (m/rw/deps cherry-pick)
 #
 # Prerequisites:
 #   - Should be on ws branch (or branch with step 1 applied)
 #   - Levanter repo cloned (default: ../levanter)
 #
 # Options:
-#   -L, --levanter-sha SHA  Override Levanter SHA (default: extract from pyproject.toml or use expected SHA)
-#   -D, --dolma-sha SHA     Override dolma SHA (default: extract from pyproject.toml or use expected SHA)
 #   -l, --lock-ref REF      Use uv.lock from specified git ref instead of re-resolving
 #   -r, --levanter-repo PATH  Path to Levanter repo (default: ../levanter)
 
@@ -29,6 +28,12 @@ Workspace Migration - Step 2
 
 Merges Levanter (with preserved Git history) into workspace as lib/levanter/
 
+Process:
+  1. Extract Levanter and dolma SHAs from lib/marin/pyproject.toml
+  2. Merge Levanter with preserved history into lib/levanter/
+
+Note: Assumes step1 has already applied dependency updates (m/rw/deps).
+
 Usage:
     ./workspace-migration/step2/main.sh [options]
 
@@ -37,25 +42,17 @@ Prerequisites:
     - Levanter repo cloned (default: ../levanter)
 
 Options:
-    -L, --levanter-sha SHA    Override Levanter SHA (default: extract from pyproject or use 63a3b1cada)
-    -D, --dolma-sha SHA       Override dolma SHA (default: extract from pyproject or use fd431d014)
     -l, --lock-ref REF        Use uv.lock from specified git ref instead of re-resolving
                               (saves 5-10 minutes during testing)
     -r, --levanter-repo PATH  Path to Levanter repo (default: ../levanter)
     -h, --help                Show this help message
 
 Examples:
-    # Default: extract SHAs from pyproject.toml (or use expected defaults), re-resolve lockfile
+    # Default: extract SHAs from lib/marin/pyproject.toml, re-resolve lockfile
     ./workspace-migration/step2/main.sh
 
     # Use existing lockfile from ws-2 (faster for testing)
     ./workspace-migration/step2/main.sh --lock-ref ws-2
-
-    # Override Levanter and dolma SHAs
-    ./workspace-migration/step2/main.sh -L 63a3b1cada -D fd431d014
-
-    # Use specific Levanter repo path
-    ./workspace-migration/step2/main.sh -r ~/path/to/levanter
 
 See workspace-migration/README.md for more details.
 EOF
@@ -67,21 +64,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/../.."
 
 # Parse options
-LEVANTER_SHA_OVERRIDE=""
-DOLMA_SHA_OVERRIDE=""
 LOCK_REF=""
 LEVANTER_REPO="../levanter"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -L|--levanter-sha)
-            LEVANTER_SHA_OVERRIDE="$2"
-            shift 2
-            ;;
-        -D|--dolma-sha)
-            DOLMA_SHA_OVERRIDE="$2"
-            shift 2
-            ;;
         -l|--lock-ref)
             LOCK_REF="$2"
             shift 2
@@ -123,71 +110,27 @@ if [ ! -d "$LEVANTER_REPO/.git" ]; then
     exit 1
 fi
 
-# Determine Levanter SHA to use
-if [ -n "$LEVANTER_SHA_OVERRIDE" ]; then
-    LEVANTER_SHA="$LEVANTER_SHA_OVERRIDE"
-    echo "Using overridden Levanter SHA: $LEVANTER_SHA"
-    echo ""
-else
-    # Try to extract pinned Levanter SHA from lib/marin/pyproject.toml (workspace structure)
-    # or pyproject.toml (pre-workspace structure)
-    if [ -f "lib/marin/pyproject.toml" ]; then
-        PYPROJECT="lib/marin/pyproject.toml"
-    elif [ -f "pyproject.toml" ]; then
-        PYPROJECT="pyproject.toml"
-    else
-        echo "ERROR: Cannot find pyproject.toml to extract Levanter SHA"
-        exit 1
-    fi
+# Extract Levanter and dolma SHAs from lib/marin/pyproject.toml
+PYPROJECT="lib/marin/pyproject.toml"
 
-    # Extract SHA from git URL: "levanter[...] @ git+https://...@<SHA>"
-    # Note: there's a space before @ in the format "levanter @ git+https"
-    PINNED_SHA=$(grep -o 'levanter.*@ git+https://[^@]*@[a-f0-9]\{40\}' "$PYPROJECT" | grep -o '[a-f0-9]\{40\}' || true)
+echo "Extracting dependency SHAs from $PYPROJECT..."
 
-    if [ -n "$PINNED_SHA" ]; then
-        LEVANTER_SHA="$PINNED_SHA"
-        echo "Using pinned Levanter SHA from $PYPROJECT: $LEVANTER_SHA"
-        echo ""
-    else
-        # Default to expected SHA (includes JAX 0.6.2 fixes, pre-commit fixes, trackio pin)
-        LEVANTER_SHA="63a3b1cada45ffb15b741ed5555fb0bc75a56e3f"
-        echo "No pinned Levanter SHA found in $PYPROJECT, using default: $LEVANTER_SHA"
-        echo "(This SHA includes JAX 0.6.2 test fixes, pre-commit fixes, and trackio>=0.5.0 pin)"
-        echo ""
-    fi
+LEVANTER_SHA=$(grep -o 'levanter.*@ git+https://[^@]*@[a-f0-9]\{40\}' "$PYPROJECT" | grep -o '[a-f0-9]\{40\}' || true)
+if [ -z "$LEVANTER_SHA" ]; then
+    echo "ERROR: Could not extract Levanter SHA from $PYPROJECT"
+    echo "Ensure step1 has been run and m/rw/deps has been applied"
+    exit 1
 fi
+echo "  Levanter SHA: $LEVANTER_SHA"
 
-# Determine dolma SHA to use
-if [ -n "$DOLMA_SHA_OVERRIDE" ]; then
-    DOLMA_SHA="$DOLMA_SHA_OVERRIDE"
-    echo "Using overridden dolma SHA: $DOLMA_SHA"
-    echo ""
-else
-    # Try to extract pinned dolma SHA from lib/marin/pyproject.toml
-    if [ -f "lib/marin/pyproject.toml" ]; then
-        PYPROJECT="lib/marin/pyproject.toml"
-    elif [ -f "pyproject.toml" ]; then
-        PYPROJECT="pyproject.toml"
-    else
-        echo "ERROR: Cannot find pyproject.toml to extract dolma SHA"
-        exit 1
-    fi
-
-    # Extract SHA from git URL: "dolma @ git+https://...@<SHA>"
-    PINNED_DOLMA_SHA=$(grep -o 'dolma.*@ git+https://[^@]*@[a-f0-9]\{40\}' "$PYPROJECT" | grep -o '[a-f0-9]\{40\}' || true)
-
-    if [ -n "$PINNED_DOLMA_SHA" ]; then
-        DOLMA_SHA="$PINNED_DOLMA_SHA"
-        echo "Using pinned dolma SHA from $PYPROJECT: $DOLMA_SHA"
-        echo ""
-    else
-        # Default to expected SHA (compatible with transformers>=4.57.1)
-        DOLMA_SHA="fd431d014d9d049b01e5f28bb1d1217a63919691"
-        echo "No pinned dolma SHA found in $PYPROJECT, using default: $DOLMA_SHA"
-        echo "(This SHA is compatible with transformers>=4.57.1 via tokenizers>=0.22)"
-        echo ""
-    fi
+DOLMA_SHA=$(grep -o 'dolma.*@ git+https://[^@]*@[a-f0-9]\{40\}' "$PYPROJECT" | grep -o '[a-f0-9]\{40\}' || true)
+if [ -z "$DOLMA_SHA" ]; then
+    echo "ERROR: Could not extract dolma SHA from $PYPROJECT"
+    echo "Ensure step1 has been run and m/rw/deps has been applied"
+    exit 1
 fi
+echo "  dolma SHA: $DOLMA_SHA"
+echo ""
 
 # Clean up lib/levanter if it only contains untracked files
 # (git checkout can leave empty dirs behind, IDEs can create .idea, etc.)
