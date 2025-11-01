@@ -53,22 +53,18 @@ The script is idempotent and hermetic - it creates the workspace structure from 
 
 ### What It Does <a id="step-1-what-it-does"></a>
 
-1. **Cherry-pick dependencies** (temporary): Apply [#1850] commit (d8036e3fa) with:
-   - Updated Levanter SHA (63a3b1cada - includes JAX 0.6.2 fixes, enable_logprobs removal)
-   - Updated dolma SHA (79ce49d - transformers pin relaxation)
-   - Pinned lm-eval and scalax SHAs
-   - Remove enable_logprobs from Marin code (adapts to Levanter PR #1277)
-   - **This step will be removed once [#1850] lands upstream**
-2. **Move package**: `src/` → `lib/marin/src/`
-3. **Create workspace root**: Transform root `pyproject.toml` to workspace config
-4. **Create member**: Create `lib/marin/pyproject.toml` for the marin package
-5. **Update paths**: Fix imports and references in:
+1. **Move package**: `src/` → `lib/marin/src/`
+2. **Create workspace root**: Transform root `pyproject.toml` to workspace config
+3. **Create member**: Create `lib/marin/pyproject.toml` for the marin package
+4. **Update paths**: Fix imports and references in:
    - `.github/workflows/*.yaml` - CI workflow paths
    - `Makefile` - Build script paths
    - `mkdocs.yml` - Documentation paths
    - Documentation files - GitHub blob URLs
-6. **Update lockfile**: Run `uv sync` (preserves package versions)
-7. **Commit**: Create migration commit
+5. **Update lockfile**: Run `uv sync` (preserves package versions)
+6. **Commit**: Create migration commit
+
+**Note**: [#1850] (Levanter/dolma SHA updates, enable_logprobs removal) has been merged to main.
 
 ### Files <a id="step-1-files"></a>
 
@@ -159,7 +155,7 @@ Merge Levanter repository with full Git history and integrate as workspace membe
 
 ### What It Does <a id="step-2-what-it-does"></a>
 
-**Prerequisites**: Step 1 must be complete (including [#1850] cherry-pick with correct Levanter/dolma SHAs)
+**Prerequisites**: Step 1 must be complete (running on a branch based on main with [#1850] merged)
 
 **Part 1**: Prepare Levanter branch
 1. Extract Levanter and dolma SHAs from `lib/marin/pyproject.toml`

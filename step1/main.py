@@ -61,40 +61,6 @@ def main():
 
     check_repo_root()
 
-    # Step 0: Cherry-pick dependency updates (m/rw/deps)
-    # TODO: Remove this once m/rw/deps is merged to main
-    print("\n" + "="*60)
-    print("Step 0: Cherry-pick dependency updates (m/rw/deps)")
-    print("="*60)
-    deps_commit = "d8036e3fa42292cf022da016e24385111d8a7bca"  # m/rw/deps with enable_logprobs removal
-
-    # Check if already applied by looking for the specific Levanter SHA
-    result = subprocess.run(
-        "grep -q 'levanter.*@63a3b1cada45ffb15b741ed5555fb0bc75a56e3f' pyproject.toml",
-        shell=True,
-        capture_output=True
-    )
-
-    if result.returncode == 0:
-        print(f"  → Dependencies already updated (found Levanter@63a3b1ca), skipping cherry-pick\n")
-    else:
-        print(f"  → Cherry-picking {deps_commit[:8]} (m/rw/deps) for Levanter/dolma SHA updates and enable_logprobs removal...")
-        result = subprocess.run(
-            f"git cherry-pick {deps_commit}",
-            shell=True,
-            capture_output=True,
-            text=True
-        )
-
-        if result.returncode != 0:
-            print(f"  ⚠️  Cherry-pick failed (may already be applied or conflict)")
-            print(f"     stdout: {result.stdout}")
-            print(f"     stderr: {result.stderr}")
-            print(f"  → Continuing anyway (deps may already be correct)\n")
-            subprocess.run("git cherry-pick --abort", shell=True, capture_output=True)
-        else:
-            print(f"  ✓ Cherry-picked {deps_commit[:8]} (m/rw/deps)\n")
-
     # Step 1: Update .gitignore
     run_command(
         "sed -i '' '/^lib\\/$/d' .gitignore",
