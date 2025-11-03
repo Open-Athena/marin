@@ -357,10 +357,10 @@ if [ -d "lib/levanter/.github/workflows" ]; then
     done
 fi
 
-# Move dependabot.yml if it exists in lib/levanter/.github/
+# Move dependabot.yml to root (workspace uses single shared uv.lock)
 if [ -f "lib/levanter/.github/dependabot.yml" ]; then
-    echo "Moving dependabot.yml with levanter- prefix..."
-    git mv lib/levanter/.github/dependabot.yml .github/levanter-dependabot.yml
+    echo "Moving dependabot.yml to root..."
+    git mv lib/levanter/.github/dependabot.yml .github/dependabot.yml
 fi
 
 # Apply workflow content updates using ruamel.yaml
@@ -400,6 +400,7 @@ git commit -m "Migrate workflows to monorepo structure
 - Update ReadTheDocs config:
   - Add --frozen to uv sync and uv run commands
 - Exclude lib/levanter/ from Marin license insertion (preserve Levanter licenses)
+- Move lib/levanter/.github/dependabot.yml to root (workspace uses shared uv.lock)
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 
