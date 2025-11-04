@@ -2,8 +2,7 @@
 
 Convert the marin repo to a uv workspace with `lib/marin/` as the main package.
 
-**Status**: Complete
-**PR**: [#1690]
+**Status**: Ready to merge ([#1690])
 
 ## Usage
 

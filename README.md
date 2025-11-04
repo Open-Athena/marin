@@ -4,13 +4,15 @@ Migration scripts for the [uv workspace migration plan][#1773].
 
 ## Quick Start
 
-**Step 1** - Initialize workspace (move marin to `lib/marin/`):
+From an arbitrary Marin `main`:
+
+**Step 1 ([#1690])** - Initialize workspace (move marin to `lib/marin/`):
 ```bash
 ./workspace-migration/step1/main.py
 ```
 See [step1/README.md](step1/README.md) for details.
 
-**Step 2** - Add Levanter as workspace member:
+**Step 2 ([#1723])** - Add Levanter as workspace member:
 ```bash
 ./workspace-migration/step2/main.sh
 ```
@@ -18,8 +20,8 @@ See [step2/README.md](step2/README.md) for details.
 
 ## Overview
 
-### Step 1: Initialize Workspace ✅
-**Status**: Complete ([PR #1690])
+### Step 1: Initialize Workspace 🚧
+**Status**: Ready to merge ([PR #1690])
 
 Convert marin to uv workspace with `lib/marin/` as main package member.
 
@@ -35,9 +37,9 @@ marin/
 ```
 
 ### Step 2: Levanter Integration 🚧
-**Status**: In progress ([PR #1723])
+**Status**: Ready to merge ([PR #1723])
 
-Merge Levanter repo (with full Git history) as `lib/levanter/` workspace member.
+Merge [Levanter] repo (with full Git history) as `lib/levanter/` workspace member.
 
 **Structure after**:
 ```
@@ -106,3 +108,4 @@ workspace-migration/
 [yaya]: https://github.com/Open-Athena/yaya
 [lossless-yaml]: https://pypi.org/project/lossless-yaml/
 [tomlkit]: https://github.com/sdispater/tomlkit
+[Levanter]: https://github.com/marin-community/levanter

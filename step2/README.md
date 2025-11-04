@@ -2,8 +2,7 @@
 
 Merge Levanter repository with full Git history and integrate as workspace member.
 
-**Status**: In progress
-**PR**: [#1723]
+**Status**: Ready to merge ([#1723])
 
 ## Usage
 
@@ -20,11 +19,6 @@ Merge Levanter repository with full Git history and integrate as workspace membe
 ./workspace-migration/step2/main.sh                           # Default
 ./workspace-migration/step2/main.sh --lock-ref ws-2          # Skip uv sync
 ./workspace-migration/step2/main.sh -r ~/levanter            # Custom path
-```
-
-**Standalone workflow migration** (if you already have the merge commit):
-```bash
-./workspace-migration/step2/migrate_workflows_standalone.sh
 ```
 
 ## What It Does
@@ -89,12 +83,6 @@ Merge Levanter repository with full Git history and integrate as workspace membe
 
 ### [`main.sh`]
 Main step 2 migration script. Hermetic bash script that orchestrates all 3 parts.
-
-### [`migrate_workflows_standalone.sh`]
-Standalone script for Part 3 (workflow migration). Useful for:
-- Re-running just the workflow migration
-- Testing workflow transformations
-- Comparing with upstream
 
 ### [`update_workflows.py`]
 Updates GitHub Actions workflows using [yaya]:
