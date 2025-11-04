@@ -26,6 +26,14 @@ def update_root_pyproject(path: Path = Path("pyproject.toml")) -> None:
     with open(path, encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
 
+    # Add levanter to project dependencies if not present (experiments imports levanter directly)
+    dependencies = doc.get("project", {}).get("dependencies", [])
+    if "levanter" not in dependencies:
+        dependencies.append("levanter")
+        print("  ✓ Added levanter to root dependencies (experiments imports levanter)")
+    else:
+        print("  - levanter already in root dependencies")
+
     # Add levanter to workspace members if not present
     workspace = doc.get("tool", {}).get("uv", {}).get("workspace", {})
     members = workspace.get("members", [])
