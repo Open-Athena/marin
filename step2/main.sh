@@ -379,8 +379,12 @@ echo "Updating pre-commit config..."
 echo "Updating ReadTheDocs config..."
 "$SCRIPT_DIR/update_readthedocs.py"
 
+# Update ray_deps.py for workspace PYTHONPATH
+echo "Updating ray_deps.py for workspace structure..."
+"$SCRIPT_DIR/update_ray_deps.py"
+
 # Commit workflow and TPU setup changes
-git add .github/ lib/levanter/infra/helpers/ .pre-commit-config.yaml .readthedocs.yaml lib/levanter/.readthedocs.yaml
+git add .github/ lib/levanter/infra/helpers/ .pre-commit-config.yaml .readthedocs.yaml lib/levanter/.readthedocs.yaml lib/marin/src/marin/run/ray_deps.py
 
 git commit -m "Migrate workflows to monorepo structure
 
@@ -399,6 +403,9 @@ git commit -m "Migrate workflows to monorepo structure
   - Add --package levanter --frozen to uv sync commands
 - Update ReadTheDocs config:
   - Add --frozen to uv sync and uv run commands
+- Update ray_deps.py PYTHONPATH for workspace structure:
+  - Change from ['src', 'experiments'] to ['lib/marin/src', 'lib/levanter/src', 'experiments']
+  - Fixes ModuleNotFoundError when running Ray jobs from workspace root
 - Exclude lib/levanter/ from Marin license insertion (preserve Levanter licenses)
 - Move lib/levanter/.github/dependabot.yml to root (workspace uses shared uv.lock)
 
