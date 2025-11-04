@@ -109,6 +109,12 @@ def main():
         "Step 5: Update CI/docs configs for workspace structure"
     )
 
+    # Step 5.5: Update ray_deps.py PYTHONPATH for workspace
+    run_command(
+        f"{script_dir}/update_ray_deps.py",
+        "Step 5.5: Update ray_deps.py PYTHONPATH (src → lib/marin/src)"
+    )
+
     # Step 6: Update uv.lock to reflect workspace structure
     run_command(
         "uv lock",
@@ -128,6 +134,7 @@ Convert Marin from single-package to uv workspace:
 - Tool configs (black, ruff, mypy, pytest) stay at root
 - Update all path references in workflows, docs, Makefile, mkdocs.yml
 - Add --package marin to uv export in ray_deps.py
+- Update ray_deps.py PYTHONPATH: ["src", "experiments"] → ["lib/marin/src", "experiments"]
 - Update CI/docs configs: GHA uses --extra=marin:cpu, ReadTheDocs installs lib/marin
 - Update uv.lock to reflect new workspace structure (marin source: lib/marin)
 

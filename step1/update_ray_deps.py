@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Update ray_deps.py for step 2 workspace structure.
+"""Update ray_deps.py for step 1 workspace structure.
 
-Adds lib/levanter/src to PYTHONPATH.
-Assumes step 1 already changed ["src", "experiments"] to ["lib/marin/src", "experiments"].
+Changes PYTHONPATH from ["src", "experiments"] to ["lib/marin/src", "experiments"].
+Step 2 will add lib/levanter/src.
 """
 
 import sys
@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def update_ray_deps():
-    """Add lib/levanter/src to PYTHONPATH in ray_deps.py."""
+    """Update ray_deps.py to use lib/marin/src instead of src."""
     ray_deps = Path("lib/marin/src/marin/run/ray_deps.py")
 
     if not ray_deps.exists():
@@ -19,18 +19,12 @@ def update_ray_deps():
 
     content = ray_deps.read_text()
 
-    # Find and replace - step1 should have already changed to lib/marin/src
-    old_paths = '    paths = ["lib/marin/src", "experiments"]'
-    new_paths = '''    # Workspace member src directories + experiments directory
-    paths = [
-        "lib/marin/src",
-        "lib/levanter/src",
-        "experiments",
-    ]'''
+    # Find and replace the old PYTHONPATH definition
+    old_paths = '    paths = ["src", "experiments"]'
+    new_paths = '    paths = ["lib/marin/src", "experiments"]'
 
     if old_paths not in content:
         print(f"Warning: Expected pattern not found in {ray_deps}")
-        print("Expected step 1 to have already updated to lib/marin/src")
         print("File may have already been updated or has unexpected format")
         sys.exit(1)
 
@@ -41,7 +35,7 @@ def update_ray_deps():
         sys.exit(1)
 
     ray_deps.write_text(updated_content)
-    print(f"✓ Updated {ray_deps} to add lib/levanter/src to PYTHONPATH")
+    print(f"✓ Updated {ray_deps} for step 1 workspace structure")
 
 
 if __name__ == "__main__":
