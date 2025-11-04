@@ -20,8 +20,8 @@ See [step2/README.md](step2/README.md) for details.
 
 ## Overview
 
-### Step 1: Initialize Workspace 🚧
-**Status**: Ready to merge ([PR #1690])
+### Step 1: Initialize Workspace ✅
+**Status**: Merged ([#1690])
 
 Convert marin to uv workspace with `lib/marin/` as main package member.
 
@@ -37,7 +37,7 @@ marin/
 ```
 
 ### Step 2: Levanter Integration 🚧
-**Status**: Ready to merge ([PR #1723])
+**Status**: Ready to merge ([#1723])
 
 Merge [Levanter] repo (with full Git history) as `lib/levanter/` workspace member.
 
@@ -102,8 +102,8 @@ workspace-migration/
 [#1773]: https://github.com/marin-community/marin/issues/1773
 [#1690]: https://github.com/marin-community/marin/pull/1690
 [#1723]: https://github.com/marin-community/marin/pull/1723
-[PR #1690]: https://github.com/marin-community/marin/pull/1690
-[PR #1723]: https://github.com/marin-community/marin/pull/1723
+[#1690]: https://github.com/marin-community/marin/pull/1690
+[#1723]: https://github.com/marin-community/marin/pull/1723
 [rw/wm]: https://github.com/Open-Athena/marin/tree/rw%2Fwm
 [yaya]: https://github.com/Open-Athena/yaya
 [lossless-yaml]: https://pypi.org/project/lossless-yaml/
