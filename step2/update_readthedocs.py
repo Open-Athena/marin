@@ -99,13 +99,10 @@ def update_levanter_rtd(rtd_yaml: Path) -> bool:
         print("  ✓ Removed old python config")
 
     # Add commands section
-    # Note: We hardcode mkdocs plugins to match what m/rw/ws-2 used, ensuring
-    # compatibility. Using docs/requirements.txt would be more DRY but might
-    # introduce unexpected changes.
+    # Use --group docs to install mkdocs dependencies (already defined in levanter's pyproject.toml)
     commands = [
         "pip install uv",
-        "cd $READTHEDOCS_CHECKOUT && uv sync --package levanter --frozen",
-        "uv pip install mkdocs mkdocstrings mkdocstrings-python mkdocs-material mkdocs-material-extensions mkdocs-autorefs mkdocs-include-markdown-plugin mkdocs-literate-nav mkdocs-macros-plugin",
+        "cd $READTHEDOCS_CHECKOUT && uv sync --group docs --package levanter --frozen",
         "cd lib/levanter && uv run --frozen mkdocs build --strict --site-dir $READTHEDOCS_OUTPUT/html",
     ]
 

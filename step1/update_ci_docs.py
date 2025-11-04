@@ -120,8 +120,7 @@ def update_readthedocs():
     python: "3.11"
   commands:
     - pip install uv
-    - uv sync --package marin
-    - uv pip install mkdocs mkdocs-material mkdocstrings[python] markdown-include mkdocs-include-markdown-plugin
+    - uv sync --group docs --package marin
     - uv run mkdocs build --strict --site-dir $READTHEDOCS_OUTPUT/html''',
                 content,
                 flags=re.DOTALL
