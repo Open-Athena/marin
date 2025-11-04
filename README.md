@@ -1,351 +1,108 @@
-# Marin + Levanter Workspace Migration
+# Marin Workspace Migration Scripts
 
-This directory contains migration scripts for the "uv workspace migration plan" ([#1773]).
+Migration scripts for the [uv workspace migration plan][#1773].
+
+## Quick Start
+
+**Step 1** - Initialize workspace (move marin to `lib/marin/`):
+```bash
+./workspace-migration/step1/main.py
+```
+See [step1/README.md](step1/README.md) for details.
+
+**Step 2** - Add Levanter as workspace member:
+```bash
+./workspace-migration/step2/main.sh
+```
+See [step2/README.md](step2/README.md) for details.
 
 ## Overview
 
-- **Step 1 🚧**: Initialize workspace
-  - Move `marin` package under `lib/marin/`
-  - Root project contains `experiments/` (depends on `lib/marin`)
-  - `data_browser` stays independent (not a workspace member)
-  - Draft PR: [#1690]
+### Step 1: Initialize Workspace ✅
+**Status**: Complete ([PR #1690])
 
-- **Step 2 🚧**: Add Levanter as workspace member
-  - Merge Levanter repo with full Git history
-  - Move Levanter to `lib/levanter/`
-  - Migrate workflows to monorepo structure
-  - Draft PR: [#1723]
+Convert marin to uv workspace with `lib/marin/` as main package member.
 
-- **Step 3 ⏸️**: Thalas (executor), Haliax, etc. (coming soon)
-
-## Contents
-
-- [Step 1: Initialize Workspace](#step-1)
-  - [Usage](#step-1-usage)
-  - [What It Does](#step-1-what-it-does)
-  - [Files](#step-1-files)
-  - [Testing](#step-1-testing)
-  - [Result](#step-1-result)
-- [Step 2: Levanter Integration](#step-2)
-  - [Usage](#step-2-usage)
-  - [What It Does](#step-2-what-it-does)
-  - [Files](#step-2-files)
-  - [Testing](#step-2-testing)
-  - [Result](#step-2-result)
-- [Step 3: Thalas and Beyond](#step-3)
-
----
-
-## Step 1: Initialize Workspace <a id="step-1"></a>
-
-Convert the marin repo to a uv workspace with `lib/marin/` as the main package.
-
-**Draft PR**: [#1690]
-
-### Usage <a id="step-1-usage"></a>
-
-```bash
-# From repo root
-./workspace-migration/step1/main.py
-```
-
-The script is idempotent and hermetic - it creates the workspace structure from the current state.
-
-### What It Does <a id="step-1-what-it-does"></a>
-
-1. **Move package**: `src/` → `lib/marin/src/`
-2. **Create workspace root**: Transform root `pyproject.toml` to workspace config
-3. **Create member**: Create `lib/marin/pyproject.toml` for the marin package
-4. **Update paths**: Fix imports and references in:
-   - `.github/workflows/*.yaml` - CI workflow paths
-   - `Makefile` - Build script paths
-   - `mkdocs.yml` - Documentation paths
-   - Documentation files - GitHub blob URLs
-5. **Update lockfile**: Run `uv sync` (preserves package versions)
-6. **Commit**: Create migration commit
-
-**Note**: [#1850] (Levanter/dolma SHA updates, enable_logprobs removal) has been merged to main.
-
-### Files <a id="step-1-files"></a>
-
-#### [`step1/main.py`]
-Main migration script. Pure Python implementation that orchestrates the entire step 1 migration.
-
-#### [`step1/transform_pyprojects.py`]
-Transforms `pyproject.toml` files using [tomlkit] to:
-- Convert root to workspace config
-- Create `lib/marin/pyproject.toml` from original
-- Preserve formatting and comments
-
-#### [`step1/update_paths.py`]
-Updates file paths throughout the codebase:
-- CI workflows
-- Documentation
-- Build scripts
-
-#### [`step1/update_ci_docs.py`]
-Updates CI and documentation configs for workspace structure.
-
-#### [`step1/test.sh`]
-Test harness that verifies step 1 is reproducible:
-1. Creates ephemeral test branch from parent commit
-2. Runs `main.py`
-3. Compares resulting git tree with expected state
-4. Cleans up on success
-
-### Testing <a id="step-1-testing"></a>
-
-```bash
-# Test reproducibility
-./workspace-migration/step1/test.sh
-
-# Manual verification
-cd path/to/migrated/repo
-uv sync                                    # Should complete successfully
-uv run python -c "import marin; print('✓')"  # Should work
-uv run pytest tests/                       # Should pass
-make check                                 # Should pass
-```
-
-### Result <a id="step-1-result"></a>
-
-After step 1:
-
+**Structure after**:
 ```
 marin/
-  pyproject.toml        # Workspace root
-  experiments/          # Stays at root, imports from lib/marin
+  pyproject.toml        # Workspace root + experiments package
+  experiments/          # Root package, imports from lib/marin
   lib/
-    marin/              # Workspace member (marin package)
+    marin/              # Workspace member
       pyproject.toml
       src/marin/
 ```
 
-**Note**: `data_browser` stays independent (not moved to `lib/`).
+### Step 2: Levanter Integration 🚧
+**Status**: In progress ([PR #1723])
 
----
+Merge Levanter repo (with full Git history) as `lib/levanter/` workspace member.
 
-## Step 2: Levanter Integration <a id="step-2"></a>
-
-Merge Levanter repository with full Git history and integrate as workspace member.
-
-**Draft PR**: [#1723]
-
-### Usage <a id="step-2-usage"></a>
-
-```bash
-# From repo root, starting from ws branch (after step 1)
-./workspace-migration/step2/main.sh [options]
-
-# Options:
-#   -l, --lock-ref REF        Use uv.lock from specified git ref instead of re-resolving
-#                             (saves 5-10 minutes during testing)
-#   -r, --levanter-repo PATH  Path to Levanter repo (default: ../levanter)
-
-# Examples:
-./workspace-migration/step2/main.sh                           # Default: ../levanter
-./workspace-migration/step2/main.sh --lock-ref ws-2          # Skip uv sync, use existing lock
-./workspace-migration/step2/main.sh -r ~/levanter            # Custom Levanter path
-```
-
-**Standalone workflow migration** (if you already have the merge commit):
-```bash
-./workspace-migration/step2/migrate_workflows_standalone.sh
-```
-
-### What It Does <a id="step-2-what-it-does"></a>
-
-**Prerequisites**: Step 1 must be complete (running on a branch based on main with [#1850] merged)
-
-**Part 1**: Prepare Levanter branch
-1. Extract Levanter and dolma SHAs from `lib/marin/pyproject.toml`
-2. Create `levanter-pkg` branch from extracted Levanter SHA
-3. Move all Levanter files to `lib/levanter/`
-4. Preserve full Git history
-
-**Part 2**: Merge into workspace
-1. Merge `levanter-pkg` into current branch
-2. Resolve `pyproject.toml` conflicts (workspace vs package config)
-3. Update workspace `pyproject.toml` to include `lib/levanter` member and dolma source
-4. Update `uv.lock` for new structure (or use `--lock-ref` to skip)
-
-**Part 3**: Migrate workflows and configs
-1. Rename Marin workflows: `*.yaml` → `marin-*.yaml`
-2. Move Levanter workflows: `lib/levanter/.github/workflows/*.yaml` → `.github/workflows/levanter-*.yaml`
-3. Update workflow content:
-   - Add "Marin - " / "Levanter - " prefixes to workflow names
-   - Add `working-directory: lib/levanter` to Levanter jobs
-   - Add path filters to trigger only on relevant changes
-   - Update `uv` commands to use `--package levanter --frozen`
-4. Update TPU setup scripts for monorepo structure
-5. Update pre-commit config to exclude `lib/levanter/` from Marin license insertion
-6. Update ReadTheDocs configs to use `--frozen` flag
-
-### Files <a id="step-2-files"></a>
-
-#### [`step2/main.sh`]
-Main step 2 migration script. Hermetic bash script that orchestrates all 3 parts.
-
-#### [`step2/migrate_workflows_standalone.sh`]
-Standalone script for Part 3 (workflow migration). Useful for:
-- Re-running just the workflow migration
-- Testing workflow transformations
-- Comparing with upstream
-
-#### [`step2/update_workflows.py`]
-Updates GitHub Actions workflows using [yaya] for YAML transformations:
-- Uses `insert_key_between()` API for safe, verified insertions
-- Handles all GitHub Actions job structures (strategy, env, permissions, etc.)
-- Zero conflicts on all Levanter workflows
-
-#### [`step2/update_tpu_setup.py`]
-Updates TPU setup scripts (`lib/levanter/infra/helpers/setup-tpu-vm*.sh`):
-- Change repo URL to marin monorepo
-- Add `--package levanter` to uv commands
-- Create `venv_path.txt` for monorepo venv location
-
-#### [`step2/update_workspace_toml.py`]
-Updates workspace `pyproject.toml` using [tomlkit] to:
-- Add `lib/levanter` to workspace members
-- Add dolma git source with specified SHA
-
-#### [`step2/update_precommit.py`]
-Updates `.pre-commit-config.yaml` to exclude `lib/levanter/` from Marin's license insertion hook.
-
-#### [`step2/update_readthedocs.py`]
-Updates `.readthedocs.yaml` and `lib/levanter/.readthedocs.yaml` to add `--frozen` flag to `uv sync` and `uv run` commands.
-
-#### [`step2/sync.sh`]
-Sync Levanter updates from upstream (for keeping `lib/levanter` in sync).
-
-#### [`step2/test.sh`]
-Test harness for verifying step 2 reproducibility.
-
-#### [`step2/STEP2_ISSUES.md`]
-Documents issues encountered during manual step 2 completion and their fixes.
-
-### Testing <a id="step-2-testing"></a>
-
-```bash
-# Test reproducibility
-./workspace-migration/step2/test.sh
-
-# Test with lock file reuse (faster)
-./workspace-migration/step2/main.sh --lock-ref ws-2
-
-# Manual verification
-uv sync                                      # Should complete
-uv run --package marin pytest tests/        # Marin tests
-uv run --package levanter pytest lib/levanter/tests/  # Levanter tests
-```
-
-### Result <a id="step-2-result"></a>
-
-After step 2:
-
+**Structure after**:
 ```
 marin/
-  pyproject.toml        # Workspace root
+  pyproject.toml        # Workspace root + experiments package
   experiments/
   .github/workflows/
     marin-*.yaml        # Marin workflows
     levanter-*.yaml     # Levanter workflows
   lib/
     marin/              # Workspace member
-      pyproject.toml
-      src/marin/
     levanter/           # Workspace member (NEW)
-      pyproject.toml
       src/levanter/
       infra/
 ```
 
-**Git history**: Full Levanter commit history is preserved in the merged branch.
+### Step 3: Thalas, Haliax, etc. ⏸️
+**Status**: Not started
 
----
+Future workspace members. See [#1773] for details.
 
-## Step 3: Thalas and Beyond <a id="step-3"></a>
-
-**Status**: Not yet implemented
-
-Future steps will add:
-- **lib/thalas/**: Executor code (factored out from Marin)
-- **lib/haliax/**: Named tensor library
-- Other workspace members as needed
-
-See [#1773] for full details on future steps.
-
-See the [uv workspace migration plan][#1773] for details.
-
-Expected structure after step 3:
-
-```
-marin/
-  pyproject.toml
-  experiments/
-  lib/
-    marin/
-    levanter/
-    haliax/           # NEW
-```
-
----
-
-## Technical Notes
+## Technical Details
 
 ### Dependencies
 
 - **uv**: Workspace and package management
-- **[lossless-yaml]** (a.k.a. [yaya]): YAML transformations (for workflow migrations)
-  - Uses `insert_key_between()` API for safe ordered insertions
-  - Uses `replace_key()` with list indices for `.readthedocs.yaml` updates
-  - Fixes GitHub Actions jinja2 expression handling
-- **[tomlkit]**: TOML transformations (preserves formatting and comments)
+- **[lossless-yaml]** (a.k.a. [yaya]): YAML transformations (workflow migrations)
+- **[tomlkit]**: TOML transformations (preserves formatting/comments)
 
-### Key Improvements
+### Design Principles
 
-**Step 2 workflow migration** (vs. old approach):
-- Uses `insert_key_between()` instead of `add_key_after`
-- Verifies key adjacency before inserting
-- Handles all GitHub Actions structures: `strategy`, `env`, `permissions`, `needs`, etc.
-- **Result**: 0 conflicts (was 9 conflicts before)
+All scripts are:
+- **Hermetic**: No external state dependencies
+- **Idempotent**: Safe to run multiple times
+- **Testable**: Test harnesses verify reproducibility
 
-### Reproducibility
+### Directory Structure
 
-Both step 1 and step 2 are designed to be:
-- **Hermetic**: Don't depend on external state
-- **Idempotent**: Can be run multiple times safely
-- **Testable**: Included test harnesses verify reproducibility
-
----
+```
+workspace-migration/
+  README.md             # This file
+  step1/
+    README.md           # Step 1 documentation
+    main.py             # Step 1 main script
+    *.py                # Step 1 helper scripts
+    test.sh             # Step 1 test harness
+  step2/
+    README.md           # Step 2 documentation
+    main.sh             # Step 2 main script
+    *.py                # Step 2 helper scripts
+    test.sh             # Step 2 test harness
+```
 
 ## Links
+
+- **Issue**: [#1773] - Workspace migration plan
+- **PRs**: [#1690] (step 1), [#1723] (step 2)
+- **Branch**: [rw/wm] - Migration scripts (this directory)
 
 [#1773]: https://github.com/marin-community/marin/issues/1773
 [#1690]: https://github.com/marin-community/marin/pull/1690
 [#1723]: https://github.com/marin-community/marin/pull/1723
-[#1850]: https://github.com/marin-community/marin/pull/1850
+[PR #1690]: https://github.com/marin-community/marin/pull/1690
+[PR #1723]: https://github.com/marin-community/marin/pull/1723
+[rw/wm]: https://github.com/Open-Athena/marin/tree/rw%2Fwm
 [yaya]: https://github.com/Open-Athena/yaya
 [lossless-yaml]: https://pypi.org/project/lossless-yaml/
 [tomlkit]: https://github.com/sdispater/tomlkit
-
-### File Links
-
-<!-- Step 1 files on rw/ws branch (PR #1690) -->
-[`step1/main.py`]: https://github.com/Open-Athena/marin/blob/rw%2Fws/workspace-migration/step1/main.py
-[`step1/transform_pyprojects.py`]: https://github.com/Open-Athena/marin/blob/rw%2Fws/workspace-migration/step1/transform_pyprojects.py
-[`step1/update_paths.py`]: https://github.com/Open-Athena/marin/blob/rw%2Fws/workspace-migration/step1/update_paths.py
-[`step1/update_ci_docs.py`]: https://github.com/Open-Athena/marin/blob/rw%2Fws/workspace-migration/step1/update_ci_docs.py
-[`step1/test.sh`]: https://github.com/Open-Athena/marin/blob/rw%2Fws/workspace-migration/step1/test.sh
-
-<!-- Step 2 files on rw/ws-2 branch (PR #1723) -->
-[`step2/main.sh`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/main.sh
-[`step2/migrate_workflows_standalone.sh`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/migrate_workflows_standalone.sh
-[`step2/update_workflows.py`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/update_workflows.py
-[`step2/update_tpu_setup.py`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/update_tpu_setup.py
-[`step2/update_workspace_toml.py`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/update_workspace_toml.py
-[`step2/update_precommit.py`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/update_precommit.py
-[`step2/update_readthedocs.py`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/update_readthedocs.py
-[`step2/sync.sh`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/sync.sh
-[`step2/test.sh`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/test.sh
-[`step2/STEP2_ISSUES.md`]: https://github.com/Open-Athena/marin/blob/rw%2Fws-2/workspace-migration/step2/STEP2_ISSUES.md
