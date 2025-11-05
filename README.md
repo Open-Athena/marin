@@ -36,8 +36,8 @@ marin/
       src/marin/
 ```
 
-### Step 2: Levanter Integration 🚧
-**Status**: Ready to merge ([#1723])
+### Step 2: Levanter Integration ✅
+**Status**: Merged ([#1723])
 
 Merge [Levanter] repo (with full Git history) as `lib/levanter/` workspace member.
 

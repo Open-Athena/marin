@@ -2,7 +2,7 @@
 
 Merge Levanter repository with full Git history and integrate as workspace member.
 
-**Status**: Ready to merge ([#1723])
+**Status**: Merged ([#1723])
 
 ## Usage
 
