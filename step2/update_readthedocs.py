@@ -102,7 +102,7 @@ def update_levanter_rtd(rtd_yaml: Path) -> bool:
     # Use --group docs to install mkdocs dependencies (already defined in levanter's pyproject.toml)
     commands = [
         "pip install uv",
-        "cd $READTHEDOCS_CHECKOUT && uv sync --group docs --package levanter --frozen",
+        "uv sync --group docs --package levanter --frozen",
         "cd lib/levanter && uv run --frozen mkdocs build --strict --site-dir $READTHEDOCS_OUTPUT/html",
     ]
 
