@@ -60,7 +60,7 @@ echo ""
 HALIAX_VERSION=$(grep 'haliax>=' lib/levanter/pyproject.toml | head -1 | sed -E 's/.*haliax>=([^"]+).*/\1/')
 echo "Current Haliax version constraint: >=$HALIAX_VERSION"
 
-# Get Haliax commit SHA from uv.lock
+# Get Haliax commit SHA from uv.lock (or use HEAD if from PyPI)
 HALIAX_SHA=$(python3 -c "
 import tomllib
 with open('uv.lock', 'rb') as f:
@@ -70,15 +70,18 @@ for pkg in lock.get('package', []):
         source = pkg.get('source', {})
         if 'git' in source:
             print(source['git'].split('#')[-1] if '#' in source['git'] else 'HEAD')
-            break
+        else:
+            # PyPI source - use HEAD
+            print('HEAD')
+        break
 ")
 
 if [ -z "$HALIAX_SHA" ]; then
-    echo "Error: Could not extract Haliax SHA from uv.lock"
+    echo "Error: Could not find Haliax in uv.lock"
     exit 1
 fi
 
-echo "Haliax SHA from uv.lock: $HALIAX_SHA"
+echo "Haliax SHA to use: $HALIAX_SHA"
 echo ""
 
 # Verify Haliax repo exists
