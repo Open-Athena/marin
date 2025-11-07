@@ -194,8 +194,38 @@ else
 fi
 echo ""
 
-echo "=== Step 3 Complete ==="
+# Part 6: Commit workspace integration changes
+echo "Part 6: Committing workspace integration..."
+git add -u
+git add .github/workflows/haliax-*.yaml 2>/dev/null || true
+
+git commit -m "$(cat <<'EOF'
+Integrate Haliax as workspace member
+
+- Add \`lib/haliax\` to workspace members
+- Convert marin and levanter haliax dependencies to workspace references
+- Migrate Haliax workflows to \`.github/workflows/haliax-*.yaml\`
+- Update \`uv.lock\` with workspace haliax
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+Co-Authored-By: Claude <noreply@anthropic.com>
+EOF
+)"
+
 echo ""
-echo "Haliax integrated as lib/haliax/"
+echo "✓ Haliax workspace integration committed!"
 echo ""
-echo "Next: Review changes and commit"
+
+#
+# Done!
+#
+
+echo "========================================="
+echo "✓ Step 3 complete!"
+echo "========================================="
+echo ""
+echo "Haliax has been merged into lib/haliax/ with full Git history preserved."
+echo "Workspace configuration updated for haliax as workspace member."
+echo ""
+echo "Next: Test the integration and create PR for step 3"
