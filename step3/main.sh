@@ -177,7 +177,7 @@ if [ -n "$LOCK_REF" ]; then
     echo "✓ Updated uv.lock from $LOCK_REF"
 else
     echo "Part 4: Resolving dependencies (this may take 5-10 minutes)..."
-    RUST_LOG=warn uv sync
+    uv sync
     git add uv.lock
     echo "✓ Resolved and locked dependencies"
 fi
