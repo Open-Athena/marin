@@ -96,7 +96,8 @@ HALIAX_BRANCH="haliax-pkg-$(date +%s)"
 
 (
     cd "$HALIAX_REPO"
-    git fetch origin
+    # Fetch from any available remote
+    git fetch $(git remote | head -1) || true
     git checkout -b "$HALIAX_BRANCH" "$HALIAX_SHA"
 
     # Move everything to lib/haliax/
