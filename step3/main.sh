@@ -57,7 +57,7 @@ echo "Part 1: Preparing Haliax branch..."
 echo ""
 
 # Get Haliax version from Levanter's dependencies (it's the more restrictive one)
-HALIAX_VERSION=$(grep -oP 'haliax>=\K[^"]+' lib/levanter/pyproject.toml | head -1)
+HALIAX_VERSION=$(grep 'haliax>=' lib/levanter/pyproject.toml | head -1 | sed -E 's/.*haliax>=([^"]+).*/\1/')
 echo "Current Haliax version constraint: >=$HALIAX_VERSION"
 
 # Get Haliax commit SHA from uv.lock
