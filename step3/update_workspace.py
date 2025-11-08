@@ -33,22 +33,31 @@ def main():
     members = root_doc["tool"]["uv"]["workspace"].get("members", [])
     if "lib/haliax" not in members:
         members.append("lib/haliax")
+        # Sort alphabetically
+        members.sort()
         root_doc["tool"]["uv"]["workspace"]["members"] = members
-        print("  ✓ Added lib/haliax to workspace members")
+        print("  ✓ Added lib/haliax to workspace members (alphabetized)")
 
     # Add haliax workspace source
     if "sources" not in root_doc["tool"]["uv"]:
         root_doc["tool"]["uv"]["sources"] = {}
 
     root_doc["tool"]["uv"]["sources"]["haliax"] = {"workspace": True}
-    print("  ✓ Added haliax workspace source")
+
+    # Alphabetize workspace sources
+    sources = root_doc["tool"]["uv"]["sources"]
+    sorted_sources = dict(sorted(sources.items()))
+    root_doc["tool"]["uv"]["sources"] = sorted_sources
+    print("  ✓ Added haliax workspace source (alphabetized)")
 
     # Add haliax to root dependencies (experiments may import it)
     if "project" in root_doc and "dependencies" in root_doc["project"]:
         deps = root_doc["project"]["dependencies"]
         if "haliax" not in [d.split("[")[0].split(">=")[0].split("==")[0] for d in deps]:
             deps.append("haliax")
-            print("  ✓ Added haliax to root dependencies")
+            # Sort alphabetically
+            deps.sort()
+            print("  ✓ Added haliax to root dependencies (alphabetized)")
 
     with open(root_pyproject, "w") as f:
         tomlkit.dump(root_doc, f)
