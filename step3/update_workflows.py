@@ -16,10 +16,20 @@ def main():
         print("No Haliax workflows to migrate")
         return
 
+    # Skip workflows that are redundant in the monorepo
+    SKIP_WORKFLOWS = {
+        "run_pre_commit.yaml",  # Handled by central marin-lint-and-format.yaml
+        "publish_dev.yaml",     # Unnecessary - users can pip install from GitHub
+    }
+
     print("Migrating Haliax workflows...")
 
     # Rename and move Haliax workflows to root .github/workflows/
     for workflow_file in haliax_workflows.glob("*.y*ml"):
+        # Skip workflows that are redundant
+        if workflow_file.name in SKIP_WORKFLOWS:
+            print(f"  {workflow_file.name} -> SKIPPED (redundant in monorepo)")
+            continue
         # Prefix with haliax-
         new_name = f"haliax-{workflow_file.name}"
         dest = root_workflows / new_name
