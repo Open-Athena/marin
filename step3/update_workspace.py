@@ -62,18 +62,14 @@ def main():
     # Remove git-based haliax dependency, workspace source will handle it
     if "dependencies" in marin_doc.get("project", {}):
         deps = marin_doc["project"]["dependencies"]
-        # Keep version constraint but remove any git URL
-        new_deps = []
-        for dep in deps:
-            if dep.startswith("haliax"):
-                # Extract version if present
+        # Modify in-place to preserve formatting
+        for i, dep in enumerate(deps):
+            if isinstance(dep, str) and dep.startswith("haliax"):
+                # Extract version if present, remove git URL
                 if ">=" in dep:
-                    new_deps.append(dep.split("@")[0].strip())
+                    deps[i] = dep.split("@")[0].strip()
                 else:
-                    new_deps.append("haliax")
-            else:
-                new_deps.append(dep)
-        marin_doc["project"]["dependencies"] = new_deps
+                    deps[i] = "haliax"
         print(f"  ✓ Updated {marin_pyproject.relative_to(repo_root)}")
 
     with open(marin_pyproject, "w") as f:
@@ -85,16 +81,14 @@ def main():
 
     if "dependencies" in levanter_doc.get("project", {}):
         deps = levanter_doc["project"]["dependencies"]
-        new_deps = []
-        for dep in deps:
-            if dep.startswith("haliax"):
+        # Modify in-place to preserve formatting
+        for i, dep in enumerate(deps):
+            if isinstance(dep, str) and dep.startswith("haliax"):
+                # Extract version if present, remove git URL
                 if ">=" in dep:
-                    new_deps.append(dep.split("@")[0].strip())
+                    deps[i] = dep.split("@")[0].strip()
                 else:
-                    new_deps.append("haliax")
-            else:
-                new_deps.append(dep)
-        levanter_doc["project"]["dependencies"] = new_deps
+                    deps[i] = "haliax"
         print(f"  ✓ Updated {levanter_pyproject.relative_to(repo_root)}")
 
     with open(levanter_pyproject, "w") as f:
