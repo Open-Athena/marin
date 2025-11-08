@@ -221,22 +221,19 @@ echo ""
 echo "Part 7: Updating pre-commit config for Haliax..."
 "$SCRIPT_DIR/update_precommit.py"
 git add -u
-git commit -m "$(cat <<'EOF'
-Add Haliax to pre-commit config with separate lint/format rules
+git commit -m "Add Haliax to pre-commit config with separate lint/format rules
 
-- Add \`HALIAX_LICENSE\` and \`HALIAX_BLACK_CONFIG\` constants
-- Add \`lib/haliax/**/*.py\` config using Haliax's own settings
-- Exclude \`lib/haliax/**\` from Marin's general Python config
-- Run \`./infra/pre-commit.py --all-files --fix\` to apply formatting
+- Add HALIAX_LICENSE and HALIAX_BLACK_CONFIG constants
+- Add lib/haliax/**/*.py config using Haliax's own settings
+- Exclude lib/haliax/** from Marin's general Python config
+- Run ./infra/pre-commit.py --all-files --fix to apply formatting
 
 This keeps Haliax's license headers and formatting separate (like Levanter),
 avoiding duplicate license headers and preserving line-length 119.
 
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
+Generated with Claude Code (https://claude.com/claude-code)
 
-Co-Authored-By: Claude <noreply@anthropic.com>
-EOF
-)"
+Co-Authored-By: Claude <noreply@anthropic.com>"
 
 echo ""
 echo "✓ Pre-commit config updated!"
