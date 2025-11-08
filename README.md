@@ -18,6 +18,12 @@ See [step1/README.md](step1/README.md) for details.
 ```
 See [step2/README.md](step2/README.md) for details.
 
+**Step 3** - Add Haliax as workspace member:
+```bash
+./workspace-migration/step3/main.sh
+```
+See [step3/README.md](step3/README.md) for details.
+
 ## Overview
 
 ### Step 1: Initialize Workspace ✅
@@ -56,10 +62,41 @@ marin/
       infra/
 ```
 
-### Step 3: Thalas, Haliax, etc. ⏸️
-**Status**: Not started
+### Step 3: Haliax Integration 🚧
+**Status**: In progress
 
-Future workspace members. See [#1773] for details.
+Merge [Haliax] repo (with full Git history) as `lib/haliax/` workspace member.
+
+**Structure after**:
+```
+marin/
+  pyproject.toml        # Workspace root + experiments package
+  experiments/
+  .github/workflows/
+    marin-*.yaml        # Marin workflows
+    levanter-*.yaml     # Levanter workflows
+    haliax-*.yaml       # Haliax workflows (NEW)
+  lib/
+    haliax/             # Workspace member (NEW)
+      src/haliax/
+    levanter/           # Workspace member
+      src/levanter/
+    marin/              # Workspace member
+      src/marin/
+    zephyr/             # Workspace member (from #1646)
+      src/zephyr/
+```
+
+**Key features**:
+- Preserves Haliax formatting (line-length 119 vs Marin's 121)
+- Separate license headers for each library
+- Automatic alphabetization of workspace config
+- In-place TOML modification to preserve multi-line arrays and comments
+
+### Step 4: Thalas/Executor Integration 📋
+**Status**: Planned
+
+Extract Marin's executor code into `lib/thalas/` workspace member. See [#1773] for details.
 
 ## Technical Details
 
@@ -91,17 +128,21 @@ workspace-migration/
     main.sh             # Step 2 main script
     *.py                # Step 2 helper scripts
     test.sh             # Step 2 test harness
+  step3/
+    README.md           # Step 3 documentation
+    main.sh             # Step 3 main script
+    update_workspace.py # Workspace config updater (with alphabetization)
+    update_workflows.py # Workflow migration
+    update_precommit.py # Pre-commit config updater
 ```
 
 ## Links
 
 - **Issue**: [#1773] - Workspace migration plan
-- **PRs**: [#1690] (step 1), [#1723] (step 2)
+- **PRs**: [#1690] (step 1), [#1723] (step 2), step 3 (in progress)
 - **Branch**: [rw/wm] - Migration scripts (this directory)
 
 [#1773]: https://github.com/marin-community/marin/issues/1773
-[#1690]: https://github.com/marin-community/marin/pull/1690
-[#1723]: https://github.com/marin-community/marin/pull/1723
 [#1690]: https://github.com/marin-community/marin/pull/1690
 [#1723]: https://github.com/marin-community/marin/pull/1723
 [rw/wm]: https://github.com/Open-Athena/marin/tree/rw%2Fwm
@@ -109,3 +150,4 @@ workspace-migration/
 [lossless-yaml]: https://pypi.org/project/lossless-yaml/
 [tomlkit]: https://github.com/sdispater/tomlkit
 [Levanter]: https://github.com/marin-community/levanter
+[Haliax]: https://github.com/marin-community/haliax
