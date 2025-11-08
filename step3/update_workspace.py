@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run
+# /// script
+# dependencies = ["tomlkit"]
+# ///
 """Update workspace configuration for Haliax integration."""
 
 import tomllib

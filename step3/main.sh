@@ -165,7 +165,7 @@ echo ""
 echo "Part 3: Updating workspace configuration..."
 echo ""
 
-python3 "$SCRIPT_DIR/update_workspace.py"
+"$SCRIPT_DIR/update_workspace.py"
 echo "✓ Updated pyproject.toml for Haliax workspace member"
 echo ""
 
@@ -187,7 +187,7 @@ echo ""
 echo "Part 5: Checking for Haliax workflows..."
 if [ -d "lib/haliax/.github/workflows" ]; then
     echo "Migrating Haliax workflows..."
-    python3 "$SCRIPT_DIR/update_workflows.py"
+    "$SCRIPT_DIR/update_workflows.py"
     echo "✓ Migrated Haliax workflows"
 else
     echo "No Haliax workflows to migrate"
