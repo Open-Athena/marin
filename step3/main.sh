@@ -132,26 +132,29 @@ git remote add haliax-temp "$HALIAX_REPO" || true
 git fetch haliax-temp "$HALIAX_BRANCH"
 
 echo "Merging haliax-temp/$HALIAX_BRANCH (with --allow-unrelated-histories)..."
-if ! git merge "haliax-temp/$HALIAX_BRANCH" --allow-unrelated-histories -m "Merge Haliax as lib/haliax/" --no-edit; then
+if ! git merge "haliax-temp/$HALIAX_BRANCH" --allow-unrelated-histories -m "Merge Haliax as lib/haliax/" --no-edit --no-renames; then
     echo ""
     echo "Merge conflicts detected. Resolving..."
 
-    # Typical conflicts: pyproject.toml, .github/, README.md
-    # Keep workspace root versions for conflicting root files
-    for file in pyproject.toml README.md .gitignore; do
-        if git diff --name-only --diff-filter=U | grep -q "^$file$"; then
-            echo "  Resolving $file: keeping workspace root version"
-            git checkout --ours "$file"
-            git add "$file"
+    # Keep workspace root files (not moved to lib/haliax/)
+    # Git's rename detection is confusing root files with lib/haliax/ files
+    echo "  Keeping workspace root files in place..."
+    git reset HEAD .github/ docs/ tests/ 2>/dev/null || true
+    git checkout --ours -- .github/ docs/ tests/ pyproject.toml README.md .gitignore 2>/dev/null || true
+    git add .github/ docs/ tests/ pyproject.toml README.md .gitignore 2>/dev/null || true
+
+    # Remove "both deleted" workflow conflicts
+    for wf in publish_dev.yaml run_quick_levanter_tests.yaml run_tests.yaml; do
+        if git diff --name-only --diff-filter=U | grep -q "^.github/workflows/$wf$"; then
+            echo "  Removing deleted workflow: .github/workflows/$wf"
+            git rm ".github/workflows/$wf" 2>/dev/null || true
         fi
     done
 
-    # For .github/ - keep both, will rename in Part 3
-    if git diff --name-only --diff-filter=U | grep -q "^.github/"; then
-        echo "  Resolving .github/: keeping workspace version (will update Haliax workflows in Part 3)"
-        git checkout --ours .github/
-        git add .github/
-    fi
+    # Accept all Haliax files into lib/haliax/
+    echo "  Accepting Haliax files into lib/haliax/..."
+    git checkout --theirs -- lib/haliax/ 2>/dev/null || true
+    git add lib/haliax/ 2>/dev/null || true
 
     git commit -m "Merge Haliax as lib/haliax/" --no-edit
 fi
