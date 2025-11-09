@@ -22,6 +22,7 @@ def main():
     SKIP_WORKFLOWS = {
         "run_pre_commit.yaml",  # Handled by central marin-lint-and-format.yaml
         "publish_dev.yaml",     # Unnecessary - users can pip install from GitHub
+        "run_quick_levanter_tests.yaml",  # Designed for standalone repo, doesn't work in monorepo
     }
 
     print("Migrating Haliax workflows...")
