@@ -72,6 +72,12 @@ def main():
         content = content.replace("uv run pytest", "uv run --package haliax pytest")
         content = content.replace("uv run python", "uv run --package haliax python")
 
+        # Add -c pyproject.toml to pytest commands to use Haliax's config instead of root
+        # This prevents pytest from using Marin's config (which has pytest-timeout/pytest-xdist args)
+        content = content.replace("pytest tests", "pytest -c pyproject.toml tests")
+        content = content.replace('pytest tests -m "not entry and not slow"',
+                                 'pytest -c pyproject.toml tests -m "not entry and not slow"')
+
         # Add path restrictions to only run on Haliax changes
         if "on:" in content and "pull_request:" in content:
             # Add paths filter if not present
