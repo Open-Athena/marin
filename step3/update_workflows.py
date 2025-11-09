@@ -87,36 +87,54 @@ def main():
 
         # 2. Add working-directory to each job
         if "jobs" in doc.data:
-            for job_name, job_config in doc.data["jobs"].items():
-                if isinstance(job_config, dict):
-                    # Add defaults.run.working-directory if not already present
-                    if "defaults" not in job_config:
-                        # Insert defaults as first key in job
-                        job_config["defaults"] = {
-                            "run": {
-                                "working-directory": "lib/haliax",
-                            },
-                        }
-                        # Reorder to put defaults first
-                        doc.data["jobs"][job_name] = {
-                            "defaults": job_config["defaults"],
-                            **{k: v for k, v in job_config.items() if k != "defaults"},
+            for job_name in doc.data["jobs"].keys():
+                # Check if defaults already exists
+                try:
+                    existing_wd = doc.get_path(f"jobs.{job_name}.defaults.run.working-directory")
+                    if existing_wd == "lib/haliax":
+                        # Already has correct working-directory
+                        pass
+                    else:
+                        print(f"    ! {job_name} has unexpected working-directory: {existing_wd}")
+                except KeyError:
+                    # No defaults - add it
+                    # Try to insert between various job keys and 'steps'
+                    inserted = False
+                    for prev_key in ["if", "strategy", "env", "permissions", "needs", "runs-on"]:
+                        try:
+                            doc.insert_key_between(
+                                f"jobs.{job_name}",
+                                prev_key=prev_key,
+                                next_key="steps",
+                                new_key="defaults",
+                                value={"run": {"working-directory": "lib/haliax"}},
+                            )
+                            inserted = True
+                            break
+                        except (KeyError, ValueError):
+                            continue
+
+                    if not inserted:
+                        # Fallback: just set it in place (will appear at end)
+                        doc.data["jobs"][job_name]["defaults"] = {
+                            "run": {"working-directory": "lib/haliax"}
                         }
 
-        # Save with yaya to preserve formatting
+        # Save with yaya to preserve formatting and structure
         doc.save(dest)
 
         # 3. Now do string replacements for command-level changes
-        # (yaya doesn't handle multi-line string values well)
+        # Unfortunately yaya doesn't have an API for replacing deeply nested values,
+        # so we need to do text replacements. But we must be careful to only replace
+        # within the run: blocks to avoid breaking the structure we just added.
         content = dest.read_text()
 
         # Update uv commands to use --package haliax
-        content = content.replace("uv sync", "uv sync --package haliax --dev")
+        content = content.replace("uv sync\n", "uv sync --package haliax --dev\n")
         content = content.replace("uv run pytest", "uv run --package haliax pytest")
         content = content.replace("uv run python", "uv run --package haliax python")
 
-        # Add -c pyproject.toml to pytest commands to use Haliax's config instead of root
-        # This prevents pytest from using Marin's config (which has pytest-timeout/pytest-xdist args)
+        # Add -c pyproject.toml to pytest commands
         content = content.replace("pytest tests", "pytest -c pyproject.toml tests")
         content = content.replace(
             'pytest tests -m "not entry and not slow"',

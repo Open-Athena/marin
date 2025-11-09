@@ -8,11 +8,16 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # Default paths
 HALIAX_REPO="../haliax"
+HALIAX_REF=""
 LOCK_REF=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -b|--haliax-ref)
+            HALIAX_REF="$2"
+            shift 2
+            ;;
         -l|--lock-ref)
             LOCK_REF="$2"
             shift 2
@@ -25,6 +30,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
+            echo "  -b, --haliax-ref REF      Use specific Haliax ref instead of uv.lock SHA"
             echo "  -l, --lock-ref REF        Use uv.lock from specified git ref"
             echo "  -r, --haliax-repo PATH    Path to Haliax repo (default: ../haliax)"
             echo "  -h, --help                Show this help"
@@ -43,6 +49,7 @@ echo "=== Step 3: Haliax Integration ==="
 echo ""
 echo "Configuration:"
 echo "  Haliax repo: $HALIAX_REPO"
+echo "  Haliax ref: ${HALIAX_REF:-<from uv.lock>}"
 echo "  Lock ref: ${LOCK_REF:-<will resolve>}"
 echo ""
 
@@ -60,8 +67,12 @@ echo ""
 HALIAX_VERSION=$(grep 'haliax>=' lib/levanter/pyproject.toml | head -1 | sed -E 's/.*haliax>=([^"]+).*/\1/')
 echo "Current Haliax version constraint: >=$HALIAX_VERSION"
 
-# Get Haliax commit SHA from uv.lock (or use HEAD if from PyPI)
-HALIAX_SHA=$(python3 -c "
+# Get Haliax commit SHA - use flag if provided, otherwise from uv.lock
+if [ -n "$HALIAX_REF" ]; then
+    HALIAX_SHA="$HALIAX_REF"
+    echo "Using Haliax ref from --haliax-ref flag: $HALIAX_SHA"
+else
+    HALIAX_SHA=$(python3 -c "
 import tomllib
 with open('uv.lock', 'rb') as f:
     lock = tomllib.load(f)
@@ -76,12 +87,13 @@ for pkg in lock.get('package', []):
         break
 ")
 
-if [ -z "$HALIAX_SHA" ]; then
-    echo "Error: Could not find Haliax in uv.lock"
-    exit 1
-fi
+    if [ -z "$HALIAX_SHA" ]; then
+        echo "Error: Could not find Haliax in uv.lock"
+        exit 1
+    fi
 
-echo "Haliax SHA to use: $HALIAX_SHA"
+    echo "Using Haliax SHA from uv.lock: $HALIAX_SHA"
+fi
 echo ""
 
 # Verify Haliax repo exists
