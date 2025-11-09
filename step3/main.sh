@@ -212,6 +212,17 @@ else
 fi
 echo ""
 
+# Part 5.5: Apply compatibility patches to Haliax tests
+echo "Part 5.5: Applying compatibility patches..."
+if [ -f "$SCRIPT_DIR/test_named_ref.patch" ]; then
+    echo "Applying test_named_ref.patch for JAX compatibility..."
+    git apply "$SCRIPT_DIR/test_named_ref.patch"
+    echo "✓ Applied test_named_ref.patch"
+else
+    echo "! Warning: test_named_ref.patch not found"
+fi
+echo ""
+
 # Part 6: Commit workspace integration changes
 echo "Part 6: Committing workspace integration..."
 git add -u

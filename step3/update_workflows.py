@@ -86,8 +86,52 @@ def main():
                     },
                 })
 
-        # 2. Add working-directory to each job
-        if "jobs" in doc.data:
+        # 2. For run_tests.yaml: Add JAX version matrix to test across 0.6.2 and 0.7.2
+        if workflow_file.name == "run_tests.yaml" and "jobs" in doc.data:
+            for job_name in doc.data["jobs"].keys():
+                # Add strategy matrix if not present
+                if "strategy" not in doc.data["jobs"][job_name]:
+                    # Insert strategy after runs-on
+                    try:
+                        doc.insert_key_between(
+                            f"jobs.{job_name}",
+                            prev_key="runs-on",
+                            next_key="steps",
+                            new_key="strategy",
+                            value={
+                                "matrix": {
+                                    "python-version": ["3.11"],
+                                    "jax-version": ["0.6.2", "0.7.2"],
+                                }
+                            },
+                        )
+                    except (KeyError, ValueError):
+                        # Fallback: just set it
+                        doc.data["jobs"][job_name]["strategy"] = {
+                            "matrix": {
+                                "python-version": ["3.11"],
+                                "jax-version": ["0.6.2", "0.7.2"],
+                            }
+                        }
+
+                # Now add defaults after strategy
+                if "defaults" not in doc.data["jobs"][job_name]:
+                    try:
+                        doc.insert_key_between(
+                            f"jobs.{job_name}",
+                            prev_key="strategy",
+                            next_key="steps",
+                            new_key="defaults",
+                            value={"run": {"working-directory": "lib/haliax"}},
+                        )
+                    except (KeyError, ValueError):
+                        # Fallback
+                        doc.data["jobs"][job_name]["defaults"] = {
+                            "run": {"working-directory": "lib/haliax"}
+                        }
+
+        # 3. Add working-directory to each job (skip for run_tests.yaml since handled above)
+        if "jobs" in doc.data and workflow_file.name != "run_tests.yaml":
             for job_name in doc.data["jobs"].keys():
                 # Check if defaults already exists
                 try:
@@ -124,7 +168,7 @@ def main():
         # Save with yaya to preserve formatting and structure
         doc.save(dest)
 
-        # 3. Now do string replacements for command-level changes
+        # 4. Now do string replacements for command-level changes
         # Unfortunately yaya doesn't have an API for replacing deeply nested values,
         # so we need to do text replacements. But we must be careful to only replace
         # within the run: blocks to avoid breaking the structure we just added.
@@ -141,6 +185,24 @@ def main():
             'pytest tests -m "not entry and not slow"',
             'pytest -c pyproject.toml tests -m "not entry and not slow"',
         )
+
+        # For run_tests.yaml: Use matrix variables and add --with for JAX version
+        if workflow_file.name == "run_tests.yaml":
+            # Use matrix python-version
+            content = content.replace(
+                "python-version: 3.11",
+                "python-version: ${{ matrix.python-version }}"
+            )
+            content = content.replace(
+                "Set up Python 3.11",
+                "Set up Python ${{ matrix.python-version }}"
+            )
+
+            # Add --with flag for JAX version and update step name
+            content = content.replace(
+                "- name: Test with pytest\n        run: |\n          XLA_FLAGS=--xla_force_host_platform_device_count=8 PYTHONPATH=tests:src:. uv run --package haliax pytest -c pyproject.toml tests",
+                "- name: Test with pytest (JAX ${{ matrix.jax-version }})\n        run: |\n          # Test with specific JAX version\n          XLA_FLAGS=--xla_force_host_platform_device_count=8 PYTHONPATH=tests:src:. uv run --package haliax --with \"jax[cpu]==${{ matrix.jax-version }}\" pytest -c pyproject.toml tests"
+            )
 
         dest.write_text(content)
 
