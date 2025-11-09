@@ -1,10 +1,12 @@
 #!/usr/bin/env -S uv run
 # /// script
+# dependencies = ["lossless-yaml==0.2.0"]
 # ///
 """Migrate Haliax workflows to monorepo structure."""
 
 from pathlib import Path
 import shutil
+from yaya import YAYA
 
 
 def main():
@@ -30,42 +32,83 @@ def main():
         if workflow_file.name in SKIP_WORKFLOWS:
             print(f"  {workflow_file.name} -> SKIPPED (redundant in monorepo)")
             continue
+
         # Prefix with haliax-
         new_name = f"haliax-{workflow_file.name}"
         dest = root_workflows / new_name
 
         print(f"  {workflow_file.name} -> {new_name}")
 
-        # Copy and update paths
-        content = workflow_file.read_text()
+        # Load workflow with yaya for lossless editing
+        doc = YAYA.load(workflow_file)
 
-        # Add working-directory to jobs that run in Haliax context
-        # Find the jobs section and add defaults with working-directory
-        if "jobs:" in content:
-            lines = content.split("\n")
-            new_lines = []
-            in_job = False
-            job_indent = None
-            added_defaults = set()
+        # 1. Update triggers with path restrictions
+        if "on" in doc.data:
+            on_val = doc.data["on"]
 
-            for i, line in enumerate(lines):
-                new_lines.append(line)
+            # Handle on: [push, pull_request] or similar list format
+            if isinstance(on_val, list):
+                doc.replace_key("on", {
+                    "push": {
+                        "branches": ["main"],
+                        "paths": [
+                            "lib/haliax/**",
+                            "uv.lock",
+                            ".github/workflows/haliax-*.yaml",
+                        ],
+                    },
+                    "pull_request": {
+                        "paths": [
+                            "lib/haliax/**",
+                            "uv.lock",
+                            ".github/workflows/haliax-*.yaml",
+                        ],
+                    },
+                })
+            # Handle on: { pull_request: { branches: [main] } }
+            elif isinstance(on_val, dict) and "pull_request" in on_val:
+                doc.replace_key("on", {
+                    "push": {
+                        "branches": ["main"],
+                        "paths": [
+                            "lib/haliax/**",
+                            "uv.lock",
+                            ".github/workflows/haliax-*.yaml",
+                        ],
+                    },
+                    "pull_request": {
+                        "paths": [
+                            "lib/haliax/**",
+                            "uv.lock",
+                            ".github/workflows/haliax-*.yaml",
+                        ],
+                    },
+                })
 
-                # Detect job start (e.g., "  build:" or "  test:")
-                if line.strip() and line.strip().endswith(":") and not line.strip().startswith("#"):
-                    if line.startswith("  ") and not line.startswith("    "):
-                        # This is a job name
-                        job_name = line.strip().rstrip(":")
-                        if job_name != "jobs":
-                            # Add working-directory after job name if not already added
-                            if job_name not in added_defaults:
-                                new_lines.append("    defaults:")
-                                new_lines.append("      run:")
-                                new_lines.append("        working-directory: lib/haliax")
-                                new_lines.append("")
-                                added_defaults.add(job_name)
+        # 2. Add working-directory to each job
+        if "jobs" in doc.data:
+            for job_name, job_config in doc.data["jobs"].items():
+                if isinstance(job_config, dict):
+                    # Add defaults.run.working-directory if not already present
+                    if "defaults" not in job_config:
+                        # Insert defaults as first key in job
+                        job_config["defaults"] = {
+                            "run": {
+                                "working-directory": "lib/haliax",
+                            },
+                        }
+                        # Reorder to put defaults first
+                        doc.data["jobs"][job_name] = {
+                            "defaults": job_config["defaults"],
+                            **{k: v for k, v in job_config.items() if k != "defaults"},
+                        }
 
-            content = "\n".join(new_lines)
+        # Save with yaya to preserve formatting
+        doc.save(dest)
+
+        # 3. Now do string replacements for command-level changes
+        # (yaya doesn't handle multi-line string values well)
+        content = dest.read_text()
 
         # Update uv commands to use --package haliax
         content = content.replace("uv sync", "uv sync --package haliax --dev")
@@ -75,20 +118,10 @@ def main():
         # Add -c pyproject.toml to pytest commands to use Haliax's config instead of root
         # This prevents pytest from using Marin's config (which has pytest-timeout/pytest-xdist args)
         content = content.replace("pytest tests", "pytest -c pyproject.toml tests")
-        content = content.replace('pytest tests -m "not entry and not slow"',
-                                 'pytest -c pyproject.toml tests -m "not entry and not slow"')
-
-        # Add path restrictions to only run on Haliax changes
-        if "on:" in content and "pull_request:" in content:
-            # Add paths filter if not present
-            if "paths:" not in content.split("pull_request:")[1].split("push:")[0]:
-                content = content.replace(
-                    "pull_request:",
-                    """pull_request:
-    paths:
-      - lib/haliax/**
-      - .github/workflows/haliax-*.yaml"""
-                )
+        content = content.replace(
+            'pytest tests -m "not entry and not slow"',
+            'pytest -c pyproject.toml tests -m "not entry and not slow"',
+        )
 
         dest.write_text(content)
 
