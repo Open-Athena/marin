@@ -132,7 +132,10 @@ git remote add haliax-temp "$HALIAX_REPO" || true
 git fetch haliax-temp "$HALIAX_BRANCH"
 
 echo "Merging haliax-temp/$HALIAX_BRANCH (with --allow-unrelated-histories)..."
-if ! git merge "haliax-temp/$HALIAX_BRANCH" --allow-unrelated-histories -m "Merge Haliax as lib/haliax/" --no-edit --no-renames; then
+# Disable rename detection to avoid confusing Marin's root files with Haliax's
+git -c merge.renames=false merge "haliax-temp/$HALIAX_BRANCH" --allow-unrelated-histories -m "Merge Haliax as lib/haliax/" --no-edit
+MERGE_STATUS=$?
+if [ $MERGE_STATUS -ne 0 ]; then
     echo ""
     echo "Merge conflicts detected. Resolving..."
 
