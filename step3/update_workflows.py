@@ -186,7 +186,7 @@ def main():
             'pytest -c pyproject.toml tests -m "not entry and not slow"',
         )
 
-        # For run_tests.yaml: Use matrix variables and add --with for JAX version
+        # For run_tests.yaml: Add defaults and use matrix variables
         if workflow_file.name == "run_tests.yaml":
             # Use matrix python-version
             content = content.replace(
@@ -196,6 +196,16 @@ def main():
             content = content.replace(
                 "Set up Python 3.11",
                 "Set up Python ${{ matrix.python-version }}"
+            )
+
+            # Add defaults section after the matrix (yaya isn't persisting it properly)
+            content = content.replace(
+                "    steps:",
+                """    defaults:
+      run:
+        working-directory: lib/haliax
+
+    steps:"""
             )
 
             # Add --with flag for JAX version and update step name
