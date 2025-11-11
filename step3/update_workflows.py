@@ -1,11 +1,26 @@
 #!/usr/bin/env -S uv run
 # /// script
-# dependencies = ["lossless-yaml==0.2.0"]
+# dependencies = [
+#     "ruamel.yaml",
+# ]
 # ///
-"""Migrate Haliax workflows to monorepo structure."""
+"""Migrate Haliax workflows to monorepo structure.
+
+Uses local yaya directly from source (not via file:// dependency).
+This ensures we get the absolute latest code including blank line fixes.
+"""
 
 from pathlib import Path
 import shutil
+import os
+import sys
+
+# Add yaya source directory FIRST so we get latest code
+sys.path.insert(0, str(Path.home() / "c/yaya/src"))
+
+# Set yaya list indentation to match GitHub Actions convention (2-space offset)
+os.environ['YAYA_LIST_OFFSET'] = '2'
+
 from yaya import YAYA
 
 
@@ -42,6 +57,9 @@ def main():
 
         # Load workflow with yaya for lossless editing
         doc = YAYA.load(workflow_file)
+
+        # Set list indentation style to match GitHub Actions convention (2-space offset)
+        doc.set_list_indent_style(offset=2)
 
         # 1. Update triggers with path restrictions
         if "on" in doc.data:
@@ -86,49 +104,8 @@ def main():
                     },
                 })
 
-        # 2. For run_tests.yaml: Add JAX version matrix to test across 0.6.2 and 0.7.2
-        if workflow_file.name == "run_tests.yaml" and "jobs" in doc.data:
-            for job_name in doc.data["jobs"].keys():
-                # Add strategy matrix if not present
-                if "strategy" not in doc.data["jobs"][job_name]:
-                    # Insert strategy after runs-on
-                    try:
-                        doc.insert_key_between(
-                            f"jobs.{job_name}",
-                            prev_key="runs-on",
-                            next_key="steps",
-                            new_key="strategy",
-                            value={
-                                "matrix": {
-                                    "python-version": ["3.11"],
-                                    "jax-version": ["0.6.2", "0.7.2"],
-                                }
-                            },
-                        )
-                    except (KeyError, ValueError):
-                        # Fallback: just set it
-                        doc.data["jobs"][job_name]["strategy"] = {
-                            "matrix": {
-                                "python-version": ["3.11"],
-                                "jax-version": ["0.6.2", "0.7.2"],
-                            }
-                        }
-
-                # Now add defaults after strategy
-                if "defaults" not in doc.data["jobs"][job_name]:
-                    try:
-                        doc.insert_key_between(
-                            f"jobs.{job_name}",
-                            prev_key="strategy",
-                            next_key="steps",
-                            new_key="defaults",
-                            value={"run": {"working-directory": "lib/haliax"}},
-                        )
-                    except (KeyError, ValueError):
-                        # Fallback
-                        doc.data["jobs"][job_name]["defaults"] = {
-                            "run": {"working-directory": "lib/haliax"}
-                        }
+        # 2. For run_tests.yaml: We'll add strategy/defaults via string replacement
+        # after saving, because yaya has issues with creating nested structures
 
         # 3. Add working-directory to each job (skip for run_tests.yaml since handled above)
         if "jobs" in doc.data and workflow_file.name != "run_tests.yaml":
@@ -186,9 +163,25 @@ def main():
             'pytest -c pyproject.toml tests -m "not entry and not slow"',
         )
 
-        # For run_tests.yaml: Add defaults and use matrix variables
+        # For run_tests.yaml: add strategy/defaults/matrix via string replacement
         if workflow_file.name == "run_tests.yaml":
-            # Use matrix python-version
+            # Insert strategy and defaults after runs-on, before steps
+            strategy_defaults = """    strategy:
+      matrix:
+        python-version: ["3.11"]
+        jax-version: ["0.6.2", "0.7.2"]
+
+    defaults:
+      run:
+        working-directory: lib/haliax
+
+"""
+            content = content.replace(
+                "    runs-on: ubuntu-latest\n\n    steps:",
+                f"    runs-on: ubuntu-latest\n\n{strategy_defaults}    steps:"
+            )
+
+            # Use matrix python-version variable
             content = content.replace(
                 "python-version: 3.11",
                 "python-version: ${{ matrix.python-version }}"
@@ -196,16 +189,6 @@ def main():
             content = content.replace(
                 "Set up Python 3.11",
                 "Set up Python ${{ matrix.python-version }}"
-            )
-
-            # Add defaults section after the matrix (yaya isn't persisting it properly)
-            content = content.replace(
-                "    steps:",
-                """    defaults:
-      run:
-        working-directory: lib/haliax
-
-    steps:"""
             )
 
             # Add --with flag for JAX version and update step name
