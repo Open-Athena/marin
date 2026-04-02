@@ -15,6 +15,7 @@ Subcommands:
 """
 
 import logging
+import math
 import os
 from dataclasses import dataclass, replace
 from datetime import timedelta
@@ -23,6 +24,7 @@ from functools import lru_cache
 import jmp
 from levanter.checkpoint import CheckpointerConfig
 from levanter.data.text import DNALmDatasetFormat
+from levanter.eval_harness import LmEvalHarnessConfig
 from levanter.main.train_lm import TrainLmConfig
 from levanter.optim import AdamHConfig
 from levanter.tracker.wandb import WandbConfig
@@ -31,7 +33,7 @@ from levanter.utils.mesh import MeshConfig
 
 from experiments.defaults import default_tokenize, default_train
 from experiments.dna.defaults import dna_effective_seq_len
-from experiments.evals.task_configs import TRAITGYM_MENDELIAN_V2_255
+from experiments.evals.task_configs import TRAITGYM_MENDELIAN_V2_255, convert_to_levanter_task_config
 from experiments.references.reference_hyperparameter_sweep import (
     SUGGESTIONS_FILENAME,
     VIZIER_DB_FILENAME,
@@ -72,8 +74,8 @@ VALIDATION_DATASETS = {
     "val_downstream": "bolinas-dna/genomes-v5-validation-intervals-v15_255_255",
 }
 
-DNA_TPU_TYPE: str | None = os.getenv("DNA_TPU_TYPE")
-DNA_RESOURCES: ResourceConfig | None = ResourceConfig.with_tpu(DNA_TPU_TYPE) if DNA_TPU_TYPE else None
+REFERENCE_TPU_TYPE = "v5p-8"
+TRANSFER_TPU_TYPE = "v4-32"
 
 # Reference sweep sizing
 REFERENCE_HIDDEN_SIZE = 512  # ~25M params with vocab_size=7
@@ -102,6 +104,7 @@ METRIC_MODE = "min"
 VIZIER_ALGORITHM = "DEFAULT"
 STUDY_OWNER = "marin"
 WANDB_PROJECT = "marin"
+REFERENCE_VERSION = "v0.6"
 
 
 def _get_initializer_ranges() -> tuple[float, ...]:
@@ -114,6 +117,27 @@ def _get_initializer_ranges() -> tuple[float, ...]:
     if invalid:
         raise ValueError(f"Invalid IR values {invalid}. Must be in {INITIALIZER_RANGES}")
     return values
+
+
+def _warmup_mode() -> bool:
+    """Check WARMUP_MODE env var. Warmup submits a subset of jobs to validate the pipeline.
+
+    All step configs are constructed identically regardless of this flag — warmup
+    is purely a filter on which steps are passed to executor_main. This ensures
+    warmup runs have the same hashes and won't be recomputed when warmup is disabled.
+    """
+    value = os.getenv("WARMUP_MODE", "no").lower()
+    if value not in ("yes", "no"):
+        raise ValueError(f"WARMUP_MODE must be 'yes' or 'no', got {value!r}")
+    return value == "yes"
+
+
+def _preview_mode() -> bool:
+    """Check PREVIEW_MODE env var. Preview prints sweep configuration and exits."""
+    value = os.getenv("PREVIEW_MODE", "no").lower()
+    if value not in ("yes", "no"):
+        raise ValueError(f"PREVIEW_MODE must be 'yes' or 'no', got {value!r}")
+    return value == "yes"
 
 
 # Schedule (same as text reference)
@@ -173,9 +197,54 @@ def _build_data_mixture():
     return lm_mixture_data_config(components=tokenized, weights=TRAIN_WEIGHTS)
 
 
+def _dna_eval_harness_config() -> LmEvalHarnessConfig:
+    """VEP eval harness config shared across sweeps."""
+    return LmEvalHarnessConfig(
+        task_spec=convert_to_levanter_task_config([TRAITGYM_MENDELIAN_V2_255]),
+        include_path="experiments/evals/custom_tasks",
+        max_packed_segments=1,
+    )
+
+
 # =============================================================================
-# Reference sweep: AdamH config builder
+# Smoke test
 # =============================================================================
+
+
+def run_smoke_test():
+    """Run ~20-step infrastructure validation with the sweep's exact config."""
+    mixture = _build_data_mixture()
+    model_config = _build_model_config(REFERENCE_HIDDEN_SIZE)
+
+    train_config = SimpleTrainConfig(
+        resources=ResourceConfig.with_tpu(REFERENCE_TPU_TYPE),
+        train_batch_size=32,
+        num_train_steps=20,
+        learning_rate=1e-3,
+        steps_per_eval=10,
+        steps_per_task_eval=10,
+        steps_per_export=20,
+    )
+
+    train_step = default_train(
+        name=f"dna-bolinas-smoke-{REFERENCE_VERSION}",
+        tokenized=mixture,
+        model_config=model_config,
+        train_config=train_config,
+        tags=["dna", "bolinas", "smoke_test", REFERENCE_VERSION],
+        eval_harness_tasks=[TRAITGYM_MENDELIAN_V2_255],
+        eval_harness_max_packed_segments=1,
+        use_default_validation=False,
+    )
+
+    executor_main(steps=[train_step], description=f"DNA Bolinas smoke test {REFERENCE_VERSION}")
+
+
+# =============================================================================
+# Reference tuning sweep
+# =============================================================================
+
+# --- AdamH config builder ---
 
 
 def _build_adamh_config(
@@ -202,9 +271,7 @@ def _build_adamh_config(
     )
 
 
-# =============================================================================
-# Reference sweep: base training config
-# =============================================================================
+# --- Base training config ---
 
 
 def _final_checkpoint_only(num_steps: int) -> CheckpointerConfig:
@@ -266,19 +333,19 @@ def _build_base_train_config(
             checkpointer=checkpointer,
             mesh=MeshConfig(axes={"replica": 1, "data": -1, "model": 1}),
             allow_nondivisible_batch_size=True,
+            crash_on_nan=False,
+            crash_on_inf=False,
         ),
     )
 
     return TrainLmOnPodConfig(
         train_config=inner,
-        resources=DNA_RESOURCES,
+        resources=ResourceConfig.with_tpu(REFERENCE_TPU_TYPE),
         output_path=this_output_path(),
     )
 
 
-# =============================================================================
-# Reference sweep: Vizier train config and function
-# =============================================================================
+# --- Vizier train config and function ---
 
 
 @dataclass(frozen=True)
@@ -360,9 +427,7 @@ def run_dna_vizier_train(config: DnaVizierTrainConfig) -> None:
     run_levanter_train_lm(pod_config)
 
 
-# =============================================================================
-# Reference sweep: step builders
-# =============================================================================
+# --- Step builders ---
 
 
 def _build_dna_suggest_step(
@@ -468,47 +533,7 @@ def _build_dna_optimal_step(
     )
 
 
-# =============================================================================
-# Subcommands (selected via SWEEP_COMMAND env var)
-# =============================================================================
-
-REFERENCE_VERSION = "v0.6"
-
-COMMANDS = (
-    "run_smoke_test",
-    "run_reference_tuning_sweep",
-    "run_transfer_validation_sweep",
-    "run_parameter_scaling_sweep",
-)
-
-
-def run_smoke_test():
-    """Run ~20-step infrastructure validation with the sweep's exact config."""
-    mixture = _build_data_mixture()
-    model_config = _build_model_config(REFERENCE_HIDDEN_SIZE)
-
-    train_config = SimpleTrainConfig(
-        resources=DNA_RESOURCES,
-        train_batch_size=32,
-        num_train_steps=20,
-        learning_rate=1e-3,
-        steps_per_eval=10,
-        steps_per_task_eval=10,
-        steps_per_export=20,
-    )
-
-    train_step = default_train(
-        name=f"dna-bolinas-smoke-{REFERENCE_VERSION}",
-        tokenized=mixture,
-        model_config=model_config,
-        train_config=train_config,
-        tags=["dna", "bolinas", "smoke_test", REFERENCE_VERSION],
-        eval_harness_tasks=[TRAITGYM_MENDELIAN_V2_255],
-        eval_harness_max_packed_segments=1,
-        use_default_validation=False,
-    )
-
-    executor_main(steps=[train_step], description=f"DNA Bolinas smoke test {REFERENCE_VERSION}")
+# --- Sweep orchestration ---
 
 
 def run_reference_tuning_sweep():
@@ -522,17 +547,9 @@ def run_reference_tuning_sweep():
     mixture = _build_data_mixture()
     all_optimal_steps = []
 
-    # SWEEP_TEST_MODE=1: run a single initializer_range, 1 loop, 1 suggestion.
-    # Use with v0.x versions to validate the full pipeline without burning compute.
-    test_mode = os.getenv("SWEEP_TEST_MODE") == "1"
-
     num_loops = NUM_LOOPS
     suggestions_per_loop = SUGGESTIONS_PER_LOOP
     initializer_ranges = _get_initializer_ranges()
-    if test_mode or os.getenv("CI") is not None:
-        num_loops = 1
-        suggestions_per_loop = 1
-        initializer_ranges = INITIALIZER_RANGES[:1]
 
     for epochs in EPOCHS:
         for init_range in initializer_ranges:
@@ -586,12 +603,390 @@ def run_reference_tuning_sweep():
             optimal_step = _build_dna_optimal_step(study_id, previous_update_step)
             all_optimal_steps.append(optimal_step)
 
+    # WARMUP_MODE=yes: submit only the first IR study to validate the full pipeline.
+    # All steps are constructed identically — warmup is purely a filter on which are submitted.
+    if _warmup_mode():
+        all_optimal_steps = all_optimal_steps[:1]
+
     executor_main(steps=all_optimal_steps, description=f"DNA Bolinas reference sweep {version}")
 
 
+# =============================================================================
+# Transfer validation sweep
+# =============================================================================
+
+# --- Reference hparams from wandb ---
+
+
+@dataclass(frozen=True)
+class ReferenceHparams:
+    """Best hparams from the reference Vizier sweep, pulled from wandb.
+
+    Single source of truth for all wandb-sourced values used by transfer/scaling
+    sweeps. Update this when re-running the reference sweep or adding new fields
+    (e.g. epochs).
+    """
+
+    # Optimizer base values (feed into CompletedAdamHHeuristic)
+    lr: float
+    adam_lr: float
+    beta1: float
+    beta2: float
+    epsilon: float
+    max_grad_norm: float
+    z_loss_weight: float
+    # Model config
+    initializer_range: float
+
+
+# Source: best run from wandb group 'dna-bolinas-reference-sweep-v0.6'
+# 89 finished runs, rank 1/89, eval/loss=1.233540
+# Run: dna-bolinas-reference-v0.6-IR0.01-E1-L9-T38
+# https://wandb.ai/eric-czech/marin/runs/dna-bolinas-ref-v0.6-IR0.01-E1-loop9-trial1-10c7b8
+REFERENCE_HPARAMS = ReferenceHparams(
+    lr=0.022493927332571054,
+    adam_lr=0.005990089450960333,
+    beta1=0.7638008970157353,
+    beta2=0.8239190207945981,
+    epsilon=7.30122781471928e-10,
+    max_grad_norm=0.30028166911223475,
+    z_loss_weight=2.9751207886876685e-06,
+    initializer_range=0.01,
+)
+
+
+# --- Heuristic and scaling ---
+
+# DNA-calibrated heuristic: CompletedAdamHHeuristic re-parameterized with the
+# DNA reference sweep's optimal values as the base point. The scaling formulas
+# (completed_adamh.py:162-209) then operate relative to the DNA reference
+# regime (B0=16384, T0=2.5B) rather than the text defaults.
+DNA_TRANSFER_HEURISTIC = CompletedAdamHHeuristic(
+    tokenizer=TOKENIZER,
+    # Reference point (from Vizier-optimized sweep)
+    reference_batch_size=FIXED_BATCH_SIZE,
+    reference_tokens=TARGET_TOKENS,
+    lr_base=REFERENCE_HPARAMS.lr,
+    adam_lr_base=REFERENCE_HPARAMS.adam_lr,
+    epsilon_base=REFERENCE_HPARAMS.epsilon,
+    beta1=REFERENCE_HPARAMS.beta1,
+    beta2_base=REFERENCE_HPARAMS.beta2,
+    max_grad_norm=REFERENCE_HPARAMS.max_grad_norm,
+    z_loss_weight=REFERENCE_HPARAMS.z_loss_weight,
+    # Constraints — all explicitly set for DNA regime rather than relying on text defaults.
+    # build_optimizer_config clips lr/adam_lr to max_learning_rate and beta2 to [min_beta2, max_beta2].
+    # Reference optimal LR (0.0225) exceeds the text default clip of 0.01.
+    max_learning_rate=0.03,
+    min_beta2=0.5,
+    max_beta2=0.9999,
+    # Batch size limits (max_batch_size checked against TRANSFER_BATCH_SIZE below)
+    min_batch_size=8,
+    max_batch_size=8192,
+    # Used by candidates_for_budget (not build_optimizer_config), but set explicitly
+    # so no text defaults leak in if we ever call those methods.
+    max_tokens_per_param=250,
+    base_max_params=12e9,
+    base_max_params_budget=3e20,
+    global_max_params=1e12,
+)
+
+TRANSFER_VERSION = "v0.12.2"
+TRANSFER_HIDDEN_SIZE = 1920  # ~1.12B params
+TRANSFER_TARGET_TOKENS = 10_000_000_000
+TRANSFER_BATCH_SIZE = 8192
+TRANSFER_NUM_POINTS = 7
+
+assert (
+    TRANSFER_BATCH_SIZE <= DNA_TRANSFER_HEURISTIC.max_batch_size
+), f"TRANSFER_BATCH_SIZE={TRANSFER_BATCH_SIZE} exceeds heuristic max_batch_size={DNA_TRANSFER_HEURISTIC.max_batch_size}"
+
+# Transferred optimizer config: the center of the sweep grid and the positive control.
+# Scales reference-optimal hparams from (B0=16384, T0=2.5B) to (B=8192, T=10B).
+TRANSFER_OPTIMIZER = DNA_TRANSFER_HEURISTIC.build_optimizer_config(TRANSFER_BATCH_SIZE, TRANSFER_TARGET_TOKENS)
+
+
+# --- Sweep axes ---
+
+
+@dataclass(frozen=True)
+class TransferSweepAxis:
+    """One axis of the transfer validation grid.
+
+    Bounds are fixed feasibility guard rails. The grid is centered at the
+    transferred optimizer value for this field (from TRANSFER_OPTIMIZER).
+    """
+
+    field: str  # field name on AdamHConfig (e.g. "learning_rate")
+    low: float
+    high: float
+    log_scale: bool
+
+
+# Feasibility bounds for sweep — derived from heuristic constraints, not hardcoded separately.
+TRANSFER_BOUNDS: dict[str, tuple[float, float]] = {
+    "learning_rate": (1e-5, DNA_TRANSFER_HEURISTIC.max_learning_rate),
+    "beta2": (DNA_TRANSFER_HEURISTIC.min_beta2, DNA_TRANSFER_HEURISTIC.max_beta2),
+}
+
+TRANSFER_SWEEP_AXES = tuple(
+    TransferSweepAxis(
+        field=field,
+        low=TRANSFER_BOUNDS[field][0],
+        high=TRANSFER_BOUNDS[field][1],
+        log_scale=(field == "learning_rate"),
+    )
+    for field in ("learning_rate", "beta2")
+)
+
+
+def _build_transfer_grid(axis: TransferSweepAxis, center: float, num_points: int = TRANSFER_NUM_POINTS) -> list[float]:
+    """Generate `num_points` grid values centered at `center` within [axis.low, axis.high].
+
+    Returns exactly `num_points` values: (num_points-1)//2 below center, center
+    itself, and the remainder above. Spacing is log or linear per `axis.log_scale`.
+    """
+    assert (
+        axis.low <= center <= axis.high
+    ), f"Transferred center {center} outside bounds [{axis.low}, {axis.high}] for {axis.field}"
+    n_below = (num_points - 1) // 2
+    n_above = num_points - 1 - n_below
+
+    if axis.log_scale:
+        log_low, log_center, log_high = math.log(axis.low), math.log(center), math.log(axis.high)
+        below = [
+            axis.low if i == 0 else math.exp(log_low + i * (log_center - log_low) / n_below) for i in range(n_below)
+        ]
+        above = [
+            axis.high if i + 1 == n_above else math.exp(log_center + (i + 1) * (log_high - log_center) / n_above)
+            for i in range(n_above)
+        ]
+    else:
+        below = [axis.low + i * (center - axis.low) / n_below for i in range(n_below)]
+        above = [center + (i + 1) * (axis.high - center) / n_above for i in range(n_above)]
+
+    grid = [*below, center, *above]
+    assert all(axis.low <= v <= axis.high for v in grid), f"Grid values outside bounds for {axis.field}: {grid}"
+    return grid
+
+
+# --- Preview ---
+
+
+def _print_transfer_preview():
+    """Print transfer sweep configuration: transferred hparams, bounds, and grid values."""
+    transferred_fields = ("learning_rate", "adam_lr", "epsilon", "beta2")  # scaled by build_optimizer_config
+    swept_fields = {axis.field for axis in TRANSFER_SWEEP_AXES}
+
+    negative_optimizer = DNA_TRANSFER_HEURISTIC.build_optimizer_config(
+        DNA_TRANSFER_HEURISTIC.reference_batch_size,
+        DNA_TRANSFER_HEURISTIC.reference_tokens,
+    )
+
+    print("=" * 70)
+    print(f"Transfer validation sweep preview — {TRANSFER_VERSION}")
+    print(f"  model: hidden={TRANSFER_HIDDEN_SIZE}, batch={TRANSFER_BATCH_SIZE}, tokens={TRANSFER_TARGET_TOKENS:.0e}")
+    num_steps = TRANSFER_TARGET_TOKENS // (TRANSFER_BATCH_SIZE * _model_seq_len())
+    print(f"  num_steps: {num_steps}")
+    print()
+
+    print("Transferred hparams (scaled by CompletedAdamH):")
+    for field in transferred_fields:
+        pos = getattr(TRANSFER_OPTIMIZER, field)
+        neg = getattr(negative_optimizer, field)
+        swept = "SWEPT" if field in swept_fields else ""
+        print(f"  {field:20s}  positive={pos:<12.6g}  negative={neg:<12.6g}  {swept}")
+    print()
+
+    print("Passed-through hparams (not scaled):")
+    for field in ("beta1", "min_lr_ratio", "warmup", "max_grad_norm", "lr_schedule", "decay", "nesterov"):
+        pos = getattr(TRANSFER_OPTIMIZER, field)
+        swept = "SWEPT" if field in swept_fields else ""
+        print(f"  {field:20s}  value={pos!s:<12}  {swept}")
+    print()
+
+    print("Sweep grid per axis:")
+    for axis in TRANSFER_SWEEP_AXES:
+        center = getattr(TRANSFER_OPTIMIZER, axis.field)
+        grid = _build_transfer_grid(axis, center)
+        off_center = [v for v in grid if v != center]
+        print(f"  {axis.field}  bounds=[{axis.low:.6g}, {axis.high:.6g}]  center={center:.6g}  log={axis.log_scale}")
+        print(f"    grid ({len(grid)} points, {len(off_center)} off-center): {[f'{v:.6g}' for v in grid]}")
+    print()
+
+    total = (
+        1
+        + 1
+        + sum(len(_build_transfer_grid(ax, getattr(TRANSFER_OPTIMIZER, ax.field))) - 1 for ax in TRANSFER_SWEEP_AXES)
+    )
+    print(f"Total runs: {total} (1 positive + 1 negative + {total - 2} off-center)")
+    print("=" * 70)
+
+
+# --- Checkpointing ---
+
+
+def _periodic_checkpoint(*, keep_every: int, interval_hours: int) -> CheckpointerConfig:
+    """Save time-based checkpoints and permanent checkpoints at keep_every steps."""
+    return CheckpointerConfig(
+        save_interval=timedelta(hours=interval_hours),
+        keep=[dict(every=keep_every)],
+    )
+
+
+# --- Step builder ---
+
+
+def _build_transfer_train_step(
+    optimizer: AdamHConfig,
+    model_config,
+    data_mixture,
+    *,
+    run_name: str,
+    wandb_group: str,
+    tags: tuple[str, ...],
+) -> ExecutorStep:
+    """Build an ExecutorStep for a single transfer validation run."""
+    num_steps = TRANSFER_TARGET_TOKENS // (TRANSFER_BATCH_SIZE * _model_seq_len())
+    steps_per_eval = num_steps // 10
+
+    inner = TrainLmConfig(
+        data=data_mixture,
+        model=model_config,
+        train_seq_len=_model_seq_len(),
+        z_loss_weight=REFERENCE_HPARAMS.z_loss_weight,
+        optimizer=optimizer,
+        # Disabled: broadcast_shard in jax_utils.py uses jax.make_array_from_callback with
+        # the global training mesh, which fails on multi-host TPUs (ValueError: "fully addressable
+        # array"). Fix was in PR#2399 / issue#2417 (marin-community/marin) but never merged.
+        # eval_harness=_dna_eval_harness_config(),
+        # eval_harness_steps=steps_per_eval,
+        trainer=TrainerConfig(
+            tracker=WandbConfig(
+                project=WANDB_PROJECT,
+                tags=list(tags),
+                group=wandb_group,
+                name=run_name,
+                replicate_path=this_output_path(),
+            ),
+            mp=jmp.get_policy("p=f32,c=bfloat16"),
+            train_batch_size=TRANSFER_BATCH_SIZE,
+            num_train_steps=num_steps,
+            steps_per_eval=steps_per_eval,
+            checkpointer=_periodic_checkpoint(keep_every=num_steps // 3, interval_hours=1),
+            mesh=MeshConfig(axes={"replica": 1, "data": -1, "model": 1}),
+            allow_nondivisible_batch_size=True,
+        ),
+    )
+
+    pod_config = TrainLmOnPodConfig(
+        train_config=inner,
+        resources=ResourceConfig.with_tpu(TRANSFER_TPU_TYPE),
+        output_path=this_output_path(),
+    )
+
+    return ExecutorStep(
+        name=os.path.join("checkpoints", run_name),
+        fn=remote(run_levanter_train_lm, resources=ResourceConfig.with_cpu()),
+        config=pod_config,
+    )
+
+
+# --- Sweep orchestration ---
+
+
 def run_transfer_validation_sweep():
-    """Sweep key hypers (LR, beta1, beta2) in isolation at single-epoch scale."""
-    raise NotImplementedError("Transfer validation sweep not yet implemented")
+    """Sweep LR, beta1, beta2 in isolation at full-epoch scale with ~4B model.
+
+    Positive control: transferred optimizer (scaled via DNA_TRANSFER_HEURISTIC).
+    Negative control: heuristic at reference point (unscaled, to validate transfer helps).
+    Per-axis sweeps: 7 points centered at transferred value, 3 axes, center deduplicated.
+    Total: 1 positive + 1 negative + 18 off-center = 20 runs.
+    """
+    if _preview_mode():
+        _print_transfer_preview()
+        return
+
+    version = TRANSFER_VERSION
+    mixture = _build_data_mixture()
+    model_config = _build_model_config(TRANSFER_HIDDEN_SIZE, REFERENCE_HPARAMS.initializer_range)
+    num_params = model_config.total_trainable_params(DNA_HEURISTIC.vocab_size)
+    wandb_group = f"dna-bolinas-transfer-sweep-{version}"
+
+    base_tags = (
+        "sweep",
+        "dna",
+        "bolinas",
+        "transfer",
+        version,
+        f"params={num_params}",
+        f"tokens={TRANSFER_TARGET_TOKENS}",
+        f"bs={TRANSFER_BATCH_SIZE}",
+    )
+    all_steps: list[ExecutorStep] = []
+
+    # Positive control: transferred (scaled) optimizer
+    positive_tags = (*base_tags, "role=positive-control")
+    all_steps.append(
+        _build_transfer_train_step(
+            TRANSFER_OPTIMIZER,
+            model_config,
+            mixture,
+            run_name=f"dna-bolinas-transfer-{version}-positive-control",
+            wandb_group=wandb_group,
+            tags=positive_tags,
+        )
+    )
+
+    # Negative control: heuristic evaluated at its reference point (B0, T0) — i.e. the
+    # raw reference-optimal hparams without transfer scaling. If scaling works, the
+    # positive control (transferred) should outperform this.
+    negative_optimizer = DNA_TRANSFER_HEURISTIC.build_optimizer_config(
+        DNA_TRANSFER_HEURISTIC.reference_batch_size,
+        DNA_TRANSFER_HEURISTIC.reference_tokens,
+    )
+    negative_tags = (*base_tags, "role=negative-control")
+    all_steps.append(
+        _build_transfer_train_step(
+            negative_optimizer,
+            model_config,
+            mixture,
+            run_name=f"dna-bolinas-transfer-{version}-negative-control",
+            wandb_group=wandb_group,
+            tags=negative_tags,
+        )
+    )
+
+    # Per-axis sweeps: 7 points each, center deduplicated as positive control above
+    if not _warmup_mode():
+        for axis in TRANSFER_SWEEP_AXES:
+            center = getattr(TRANSFER_OPTIMIZER, axis.field)
+            grid = _build_transfer_grid(axis, center)
+            for i, value in enumerate(grid):
+                if value == center:
+                    continue  # deduplicated as positive control
+                swept_optimizer = replace(TRANSFER_OPTIMIZER, **{axis.field: value})
+                sweep_tags = (*base_tags, f"axis={axis.field}", f"{axis.field}={value}")
+                all_steps.append(
+                    _build_transfer_train_step(
+                        swept_optimizer,
+                        model_config,
+                        mixture,
+                        run_name=f"dna-bolinas-transfer-{version}-{axis.field}-{i}",
+                        wandb_group=wandb_group,
+                        tags=sweep_tags,
+                    )
+                )
+
+    # TODO: Remove this filter — temporary hack to exclude already-running steps
+    _skip = ("-negative-control", "-positive-control", *[f"-learning_rate-{i}" for i in (0, 1, 2, 4, 5, 6)])
+    all_steps = [s for s in all_steps if not any(s.name.endswith(k) for k in _skip)]
+
+    executor_main(steps=all_steps, description=f"DNA Bolinas transfer validation {version}")
+
+
+# =============================================================================
+# Parameter scaling sweep
+# =============================================================================
 
 
 def run_parameter_scaling_sweep():
@@ -599,9 +994,18 @@ def run_parameter_scaling_sweep():
     raise NotImplementedError("Parameter scaling sweep not yet implemented")
 
 
+# =============================================================================
+# Entry point
+# =============================================================================
+
+COMMANDS = (
+    "run_smoke_test",
+    "run_reference_tuning_sweep",
+    "run_transfer_validation_sweep",
+    "run_parameter_scaling_sweep",
+)
+
 if __name__ == "__main__":
-    if not DNA_TPU_TYPE:
-        raise ValueError("Set DNA_TPU_TYPE env var (e.g. v5p-8, v4-8)")
     command = os.environ.get("SWEEP_COMMAND")
     if command is None or command not in COMMANDS:
         raise ValueError(f"Set SWEEP_COMMAND to one of: {', '.join(COMMANDS)}")

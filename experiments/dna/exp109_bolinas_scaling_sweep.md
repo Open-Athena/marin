@@ -14,6 +14,38 @@ Animals / single bp tokenization: union of `region` ∈ {`upstream`, `downstream
 - Mixture weights (proportional to examples, equivalent to concatenation): CDS=0.7319, upstream=0.2062, downstream=0.0619
 - Tokenizer: [tokenizer-char-bos](https://huggingface.co/bolinas-dna/tokenizer-char-bos), vocab_size=7 (PAD, UNK, BOS, a, c, g, t). Usage in [`exp94_human_enhancers.py`](https://github.com/marin-community/marin/blob/human-enhancers/experiments/dna/exp94_human_enhancers.py).
 
+<details><summary>Tokenized dataset size</summary>
+
+```
+tokenized dataset sizes in gs://marin-dna-us-central1/tokenized/:
+
+  ┌────────────────────────────────────┬───────────┐
+  │              Dataset               │   Size    │
+  ├────────────────────────────────────┼───────────┤
+  │ Training                           │           │
+  ├────────────────────────────────────┼───────────┤
+  │ bolinas-v5-cds-char-bos            │ 92.0 GB   │
+  ├────────────────────────────────────┼───────────┤
+  │ bolinas-v5-upstream-char-bos       │ 28.2 GB   │
+  ├────────────────────────────────────┼───────────┤
+  │ bolinas-v5-downstream-char-bos     │ 8.7 GB    │
+  ├────────────────────────────────────┼───────────┤
+  │ Training total                     │ ~128.9 GB │
+  ├────────────────────────────────────┼───────────┤
+  │ Validation                         │           │
+  ├────────────────────────────────────┼───────────┤
+  │ bolinas-v5-val_cds-char-bos        │ 14.9 MB   │
+  ├────────────────────────────────────┼───────────┤
+  │ bolinas-v5-val_upstream-char-bos   │ 12.2 MB   │
+  ├────────────────────────────────────┼───────────┤
+  │ bolinas-v5-val_downstream-char-bos │ 11.8 MB   │
+  ├────────────────────────────────────┼───────────┤
+  │ Validation total                   │ ~38.9 MB  │
+  └────────────────────────────────────┴───────────┘
+```
+
+</details>
+
 ### Metrics
 
 - Online: unweighted CE loss nats / BPB (cf. [marin#2310](https://github.com/marin-community/marin/pull/2310)), stratified by `region` (inferred from dataset source or added as explicit field)
@@ -82,14 +114,16 @@ data = []
 for r in runs:
     if r.state != 'finished' or not isinstance(r.summary.get('eval/loss'), float): continue
     tags = {k: float(v) for t in r.tags if '=' in t for k, v in [t.split('=', 1)] if k in KEYS}
-    data.append({'loss': r.summary['eval/loss'], **tags})
+    data.append({'loss': r.summary['eval/loss'], 'url': r.url, **tags})
 best = min(data, key=lambda d: d['loss'])
 print(f'{len(data)} finished runs. Best (eval/loss={best[\"loss\"]:.6f}):')
-print({k: v for k, v in best.items() if k != 'loss'})
+print(best['url'])
+print({k: v for k, v in best.items() if k not in ('loss', 'url')})
 "
-# 58 finished runs. Best (eval/loss=1.245171):
-# {'adam_lr': 0.00378, 'beta1': 0.8496, 'beta2': 0.7304, 'eps': 0.000273,
-#  'initializer_range': 0.01, 'lr': 0.001809, 'mgn': 0.6678, 'zloss': 0.0363}
+# 69 finished runs. Best (eval/loss=1.240387):
+# https://wandb.ai/eric-czech/marin/runs/dna-bolinas-ref-v0.6-IR0.01-E1-loop5-trial1-371753
+# {'adam_lr': 0.01391, 'beta1': 0.6001, 'beta2': 0.7163, 'eps': 8.816e-08,
+#  'initializer_range': 0.01, 'lr': 0.003345, 'mgn': 0.5227, 'zloss': 0.000169}
 ```
 
 ### Step 3: Parameter scaling sweep
@@ -118,48 +152,42 @@ IMPORTANT: ALL changes go to one of the modules above be default; ask first othe
 - Run names: `dna-bolinas-{step}-{VERSION}-...` with step-specific suffixes. Output path = `checkpoints/{run_name}`.
 - Wandb group per step+version. Run name is a strict subset of tags.
 - `epochs` is hardcoded to 1 for now but must appear in run names, tags, and all analyses as a first-class dimension
-- IMPORTANT: Analysis code in Bolinas collects from wandb only, not Marin source code
-- Checkpointing: `FINAL_CHECKPOINT_ONLY` for all sweeps — no intermediate checkpoints, final checkpoint saved automatically by Levanter's `Trainer.train()` via `force=True`. Reference sweep needs only `tracker_metrics.jsonl` for Vizier; transfer/scaling sweeps need the final checkpoint for offline eval.
+- Checkpointing: Use `_final_checkpoint_only` for all sweeps by default, unless otherwise specified.
+- IMPORTANT: Analysis code in Bolinas collects from wandb only, not Marin source code.
+
+Per-step progress with timestamps (for ETA estimation):
+```python
+import wandb; api = wandb.Api()
+run = api.run('eric-czech/marin/<RUN_ID>')
+hist = list(run.scan_history(keys=['_step', '_timestamp', 'run_progress']))
+# _timestamp: unix epoch when the step was logged; run_progress: fraction in [0, 1]
+```
 
 ### Execution
 
-Setup: [guidelines-internal.md](https://github.com/marin-community/marin/blob/main/docs/dev-guide/guidelines-internal.md) (GCP auth, Ray token, dashboard).
-
-Environment: `.env` has shared vars (API keys, project ID). Region-specific vars (BUCKET, REGION) live in overlay files (`.env.us-central1`, `.env.us-central2`, `.env.us-east5`). Source both before running commands.
-
-Subcommand dispatch uses `SWEEP_COMMAND` env var. All commands assume env is sourced.
-
-Clusters: `us-central1` (bucket: `gs://marin-dna-us-central1`, v5p-8 through v5p-2048, no v4). `us-central2` (bucket: `gs://marin-us-central2`, v4-16+ only). `us-east5` (bucket: `gs://marin-us-east5`, secondary v5p cluster). [Cluster definitions](https://gist.github.com/eric-czech/fd24000d463c2663f0a95587da1febe1#7-clusters--tpus) | [Cluster status script](https://gist.github.com/eric-czech/bab558e275b478fb60a6cc97545d65fb)
-
-```bash
-# Source shared env + region overlay
-source .env && source .env.us-central1
-
-# Smoke test (~20 steps, validates data/model/VEP eval)
-uv run lib/marin/src/marin/run/ray_run.py \
-  --env_vars WANDB_API_KEY ${WANDB_API_KEY} \
-  --env_vars HUGGING_FACE_HUB_TOKEN ${HUGGING_FACE_HUB_TOKEN} \
-  --env_vars SWEEP_COMMAND run_smoke_test \
-  -- python experiments/dna/exp109_bolinas_scaling_sweep.py --prefix $BUCKET
-
-# Reference sweep (add SWEEP_TEST_MODE=1 for single-trial test run)
-# Bump VERSION to v1.0 before full run.
-uv run lib/marin/src/marin/run/ray_run.py \
-  --env_vars WANDB_API_KEY ${WANDB_API_KEY} \
-  --env_vars HUGGING_FACE_HUB_TOKEN ${HUGGING_FACE_HUB_TOKEN} \
-  --env_vars SWEEP_COMMAND run_reference_tuning_sweep \
-  --env_vars SWEEP_TEST_MODE 1 \
-  -- python experiments/dna/exp109_bolinas_scaling_sweep.py --prefix $BUCKET
-```
-
-```bash
-# List/stop jobs (submission ID printed at submit time; resubmit to resume)
-uv run scripts/ray/cluster.py --cluster $REGION list-jobs
-uv run scripts/ray/cluster.py --cluster $REGION stop-job <submission-id>
-```
+Subcommand dispatch uses `SWEEP_COMMAND` env var.  Ask the subcommand to use is not clear from context.
 
 ### TODOs
 
 - [ ] Review `.gitignore` workaround: iris `_pb2.py` proto files are temporarily tracked because Ray's `working_dir` upload respects `.gitignore`, causing `ImportError` on cluster. Proper fix: pip-install iris in Ray runtime env or fix hatch build hook to run on cluster.
 - [ ] Empirically verify checkpoint behavior (force=True at end of training)
 - [ ] Bump `VERSION` to `v1.0` before full run
+- [ ] Document error on `vizier._src.service.grpc_util.LocalRpcError: Trial owners/marin/studies/dna-bolinas-ref-v0.6-IR0.0025-E1/trials/1 has state SUCCEEDED. Only trials in state ACTIVE or STOPPING can be completed.` and corresponding fix in `reference_hyperparameter_sweep.py`
+- [ ] Document needing to set crash_on_nan=False, crash_on_inf=False
+- [ ] Rename FIXED_BATCH_SIZE to REFERENCE_BATCH_SIZE (and all dataclass fields related to it)
+- [ ] Note max batch size that worked on v4-32 for 4B model (2944 hidden), 25B tokens (8192? -- 16834 was over)
+- [ ] Bring back in-training evals pending https://discord.com/channels/1354881461060243556/1364827114670657616/1490337486944080042
+- [ ] Check time spent in evals for transfer validation sweep (reduce from 10x per run?)
+- [ ] Document `huggingface_hub.errors.HfHubHTTPError: 429 Client Error: Too Many Requests for url: https://huggingface.co/api/datasets/bolinas-dna/genomes-v5-validation-intervals-v1_255_255/tree/4050939d615b7130799ac9fa74472423fba81eaf/data?recursive=True&expand=False` even w/ just 2 jobs running at once
+- [ ] Try iris with `marin-dev.yaml` instead of `marin.yaml`
+
+### Misc
+
+Old `.gitignore` lines:
+
+```
+# lib/iris/src/iris/rpc/*_pb2.py
+# lib/iris/src/iris/rpc/*_pb2.pyi
+# lib/iris/src/iris/rpc/*_connect.py
+```
+
