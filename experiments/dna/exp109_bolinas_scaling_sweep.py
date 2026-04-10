@@ -75,7 +75,7 @@ VALIDATION_DATASETS = {
 }
 
 REFERENCE_TPU_TYPE = "v5p-8"
-TRANSFER_TPU_TYPE = "v4-32"
+TRANSFER_TPU_TYPE = "v5p-8"
 
 # Reference sweep sizing
 REFERENCE_HIDDEN_SIZE = 512  # ~25M params with vocab_size=7
@@ -640,18 +640,18 @@ class ReferenceHparams:
 
 
 # Source: best run from wandb group 'dna-bolinas-reference-sweep-v0.6'
-# 89 finished runs, rank 1/89, eval/loss=1.233540
-# Run: dna-bolinas-reference-v0.6-IR0.01-E1-L9-T38
-# https://wandb.ai/eric-czech/marin/runs/dna-bolinas-ref-v0.6-IR0.01-E1-loop9-trial1-10c7b8
+# 183 finished runs, rank 1/183, eval/loss=1.228545
+# Run: dna-bolinas-reference-v0.6-IR0.02-E1-L8-T32
+# https://wandb.ai/eric-czech/marin/runs/dna-bolinas-ref-v0.6-IR0.02-E1-loop8-trial3-abad72
 REFERENCE_HPARAMS = ReferenceHparams(
-    lr=0.022493927332571054,
-    adam_lr=0.005990089450960333,
-    beta1=0.7638008970157353,
-    beta2=0.8239190207945981,
-    epsilon=7.30122781471928e-10,
-    max_grad_norm=0.30028166911223475,
-    z_loss_weight=2.9751207886876685e-06,
-    initializer_range=0.01,
+    lr=0.015566099981405093,
+    adam_lr=0.02989514059663958,
+    beta1=0.6675603345321236,
+    beta2=0.9067269880630742,
+    epsilon=1e-15,
+    max_grad_norm=0.9951880136348765,
+    z_loss_weight=4.312883184368223e-06,
+    initializer_range=0.02,
 )
 
 
@@ -675,25 +675,19 @@ DNA_TRANSFER_HEURISTIC = CompletedAdamHHeuristic(
     z_loss_weight=REFERENCE_HPARAMS.z_loss_weight,
     # Constraints — all explicitly set for DNA regime rather than relying on text defaults.
     # build_optimizer_config clips lr/adam_lr to max_learning_rate and beta2 to [min_beta2, max_beta2].
-    # Reference optimal LR (0.0225) exceeds the text default clip of 0.01.
+    # Reference optimal adam_lr (0.0299) nearly hits the text default clip of 0.01.
     max_learning_rate=0.03,
     min_beta2=0.5,
     max_beta2=0.9999,
     # Batch size limits (max_batch_size checked against TRANSFER_BATCH_SIZE below)
     min_batch_size=8,
     max_batch_size=8192,
-    # Used by candidates_for_budget (not build_optimizer_config), but set explicitly
-    # so no text defaults leak in if we ever call those methods.
-    max_tokens_per_param=250,
-    base_max_params=12e9,
-    base_max_params_budget=3e20,
-    global_max_params=1e12,
 )
 
-TRANSFER_VERSION = "v0.12.2"
+TRANSFER_VERSION = "v0.13"
 TRANSFER_HIDDEN_SIZE = 1920  # ~1.12B params
 TRANSFER_TARGET_TOKENS = 10_000_000_000
-TRANSFER_BATCH_SIZE = 8192
+TRANSFER_BATCH_SIZE = 4096
 TRANSFER_NUM_POINTS = 7
 
 assert (
@@ -701,7 +695,7 @@ assert (
 ), f"TRANSFER_BATCH_SIZE={TRANSFER_BATCH_SIZE} exceeds heuristic max_batch_size={DNA_TRANSFER_HEURISTIC.max_batch_size}"
 
 # Transferred optimizer config: the center of the sweep grid and the positive control.
-# Scales reference-optimal hparams from (B0=16384, T0=2.5B) to (B=8192, T=10B).
+# Scales reference-optimal hparams from (B0=16384, T0=2.5B) to (B=4096, T=10B).
 TRANSFER_OPTIMIZER = DNA_TRANSFER_HEURISTIC.build_optimizer_config(TRANSFER_BATCH_SIZE, TRANSFER_TARGET_TOKENS)
 
 
@@ -752,17 +746,18 @@ def _build_transfer_grid(axis: TransferSweepAxis, center: float, num_points: int
     n_above = num_points - 1 - n_below
 
     if axis.log_scale:
-        log_low, log_center, log_high = math.log(axis.low), math.log(center), math.log(axis.high)
-        below = [
-            axis.low if i == 0 else math.exp(log_low + i * (log_center - log_low) / n_below) for i in range(n_below)
-        ]
-        above = [
-            axis.high if i + 1 == n_above else math.exp(log_center + (i + 1) * (log_high - log_center) / n_above)
-            for i in range(n_above)
-        ]
+        log_center = math.log(center)
+        log_span = min(log_center - math.log(axis.low), math.log(axis.high) - log_center)
+        log_low = log_center - log_span
+        log_high = log_center + log_span
+        below = [math.exp(log_low + i * (log_center - log_low) / n_below) for i in range(n_below)]
+        above = [math.exp(log_center + (i + 1) * (log_high - log_center) / n_above) for i in range(n_above)]
     else:
-        below = [axis.low + i * (center - axis.low) / n_below for i in range(n_below)]
-        above = [center + (i + 1) * (axis.high - center) / n_above for i in range(n_above)]
+        span = min(center - axis.low, axis.high - center)
+        low = center - span
+        high = center + span
+        below = [low + i * (center - low) / n_below for i in range(n_below)]
+        above = [center + (i + 1) * (high - center) / n_above for i in range(n_above)]
 
     grid = [*below, center, *above]
     assert all(axis.low <= v <= axis.high for v in grid), f"Grid values outside bounds for {axis.field}: {grid}"
@@ -977,9 +972,9 @@ def run_transfer_validation_sweep():
                     )
                 )
 
-    # TODO: Remove this filter — temporary hack to exclude already-running steps
-    _skip = ("-negative-control", "-positive-control", *[f"-learning_rate-{i}" for i in (0, 1, 2, 4, 5, 6)])
-    all_steps = [s for s in all_steps if not any(s.name.endswith(k) for k in _skip)]
+    # TODO: Remove this filter — temporary hack to run a subset of steps
+    _keep = ("-negative-control", "-positive-control", *[f"-learning_rate-{i}" for i in range(TRANSFER_NUM_POINTS)])
+    all_steps = [s for s in all_steps if any(s.name.endswith(k) for k in _keep)]
 
     executor_main(steps=all_steps, description=f"DNA Bolinas transfer validation {version}")
 

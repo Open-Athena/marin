@@ -179,7 +179,10 @@ Subcommand dispatch uses `SWEEP_COMMAND` env var.  Ask the subcommand to use is 
 - [ ] Bring back in-training evals pending https://discord.com/channels/1354881461060243556/1364827114670657616/1490337486944080042
 - [ ] Check time spent in evals for transfer validation sweep (reduce from 10x per run?)
 - [ ] Document `huggingface_hub.errors.HfHubHTTPError: 429 Client Error: Too Many Requests for url: https://huggingface.co/api/datasets/bolinas-dna/genomes-v5-validation-intervals-v1_255_255/tree/4050939d615b7130799ac9fa74472423fba81eaf/data?recursive=True&expand=False` even w/ just 2 jobs running at once
-- [ ] Try iris with `marin-dev.yaml` instead of `marin.yaml`
+- [ ] Fix `TypeError: fused_cross_entropy_loss_and_logsumexp_penalty() got an unexpected keyword argument 'implementation'`
+  - This failed in `/eczech/iris-run-exp109_bolinas_sweep_eval-20260410-031214/train_lm`
+  - See `https://github.com/marin-community/marin/pull/3644#issue-4074042528`
+  - It's unclear why this doesn't seem to be supported on the underlying container images
 
 ### Misc
 
