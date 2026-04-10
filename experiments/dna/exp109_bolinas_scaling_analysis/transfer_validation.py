@@ -178,7 +178,8 @@ def plot(df: pd.DataFrame) -> None:
     ax.legend(fontsize=8, loc="upper right")
     fig.tight_layout()
     RESULTS_DIR.mkdir(parents=True, exist_ok=True)
-    fig.savefig(PLOT_PATH, dpi=150)
+    fig.savefig(PLOT_PATH, dpi=300)
+    fig.savefig(PLOT_PATH.with_suffix(".pdf"))
     print(f"Saved to {PLOT_PATH}")
 
 

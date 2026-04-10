@@ -159,7 +159,7 @@ def plot(df: pd.DataFrame, metric: str = "eval/loss") -> None:
     sorted_labels = [key_to_label[k] for k in sorted_importance.index]
     sorted_colors = plt.cm.tab10([HPARAM_KEYS.index(k) for k in sorted_importance.index])
 
-    fig = plt.figure(figsize=(16, 10))
+    fig = plt.figure(figsize=(12, 10))
     gs_top = GridSpec(1, 4, figure=fig, top=0.95, bottom=0.75, wspace=0.08)
     gs_bot = GridSpec(3, 4, figure=fig, height_ratios=[1.5, 2, 2], top=0.67, bottom=0.05, hspace=0.3, wspace=0.08)
 

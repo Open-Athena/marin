@@ -148,7 +148,7 @@ def plot(g: pd.DataFrame, bs: int, hid: int, token_budget: int) -> None:
 
     # Layout: SHAP bar on top, scatter grid below
     scatter_rows = (len(HYPERS) + 3) // 4
-    fig = plt.figure(figsize=(16, 7.5))
+    fig = plt.figure(figsize=(12, 7.5))
     gs = GridSpec(
         1 + scatter_rows,
         4,
