@@ -10,8 +10,6 @@ from typing import List, Optional, Union
 
 import jax
 from jax._src import clusters
-from iris.cluster.client.job_info import get_job_info
-from iris.runtime.jax_init import initialize_jax as initialize_iris_jax
 
 
 logger = logging.getLogger(__name__)
@@ -218,6 +216,14 @@ class DistributedConfig:
         if not self.initialize_jax_distributed:
             logger.info("Skipping jax.distributed.initialize because initialize_jax_distributed=False.")
             return
+
+        # Lazy imports: hoisting these to module-top (per marin #5594) breaks
+        # TPU iris workers because something in the iris import chain touches
+        # the XLA backend at module-load time, which makes the subsequent
+        # `jax.distributed.initialize()` raise `must be called before any JAX
+        # calls that might initialise the XLA backend`. See marin#<TBD>.
+        from iris.cluster.client.job_info import get_job_info
+        from iris.runtime.jax_init import initialize_jax as initialize_iris_jax
 
         if get_job_info() is not None:
             logger.info("Detected Iris job context; initializing jax.distributed via iris.runtime.jax_init.")
