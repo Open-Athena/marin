@@ -338,6 +338,50 @@ class DirectDatasetComponent(DatasetComponentBase):
     tags: list[str] | None = None
 
 
+@DatasetComponentBase.register_subclass("concat")
+@dataclass(frozen=True)
+class ConcatDatasetComponent(DatasetComponentBase):
+    """Virtually concatenate N pre-built caches into one logical training stream.
+
+    Each child is a `DatasetComponent` with its own cache. At train time the
+    child caches are loaded as `TreeCache`s, each wrapped via
+    `dataset_for_component` into a per-format `AsyncDataset`, then composed via
+    `ConcatDataset` into a single `AsyncDataset` that presents the union row
+    index space.
+
+    All children must share the same `format` (and thus vocabulary, packing,
+    etc.) so the per-child datasets compose into a homogeneous stream. The
+    shuffle pipeline downstream of `build_token_datasets` sees ONE dataset and
+    applies `BlockShuffleConfig` to it — strict without-replacement mixing
+    across the union, no physical cache rebuild.
+
+    Contrast with passing N source URLs to `UrlDatasetSourceConfig.train_urls`:
+    that path consolidates physically into a new on-disk cache (via
+    `consolidate_shard_caches`), this path reuses existing per-shard caches in
+    place — useful when you tokenized data into shards (e.g. for parallelism)
+    and now want to train on arbitrary unions without paying the rebuild cost.
+
+    Children's `cache_dir`s should be explicit (one cache per child); the
+    concat-component's own cache_dir is unused.
+    """
+
+    children: dict[str, DatasetComponent] = field(default_factory=dict)
+    tags: list[str] | None = None
+
+    def __post_init__(self):
+        if not self.children:
+            raise ValueError("ConcatDatasetComponent requires at least one child")
+        # Verify all children share the same format — heterogeneous schemas
+        # would not compose into a single AsyncDataset.
+        formats = {name: type(c.format).__name__ for name, c in self.children.items()}
+        unique_format_types = set(formats.values())
+        if len(unique_format_types) > 1:
+            raise ValueError(
+                f"ConcatDatasetComponent children must share a format type; "
+                f"got: {formats}"
+            )
+
+
 def _effective_pack(component: DatasetComponent) -> bool | int | Literal["pad"]:
     if component.pack is not None:
         return component.pack
@@ -681,6 +725,8 @@ class LmDataConfig:
         return any(w.get(name, 0) > 0 for _, w in weights)
 
     def build_token_datasets(self, caches: Mapping[str, TreeCache[dict]], Pos: Axis, *, split: str):
+        from levanter.data.mixture import ConcatDataset
+
         datasets: dict[str, AsyncDataset[GrugLmExample]] = {}
         for name, component in self.components.items():
             if split == "train" and not self._has_nonzero_weight(name):
@@ -694,6 +740,38 @@ class LmDataConfig:
                     logger.warning("Direct dataset format missing %s split for component %s", split, name)
                     continue
                 datasets[name] = direct
+                continue
+
+            if isinstance(component, ConcatDatasetComponent):
+                # Look up each child's cache (stored flat under
+                # `<name>/<child_name>` by `build_caches`) and build per-child
+                # datasets via the same `dataset_for_component` path the plain
+                # case uses. Then wrap in `ConcatDataset` so the shuffle layer
+                # downstream sees one unified rowspace.
+                child_datasets: dict[str, AsyncDataset[GrugLmExample]] = {}
+                for child_name, child in component.children.items():
+                    flat_key = f"{name}/{child_name}"
+                    child_cache = caches.get(flat_key)
+                    if child_cache is None:
+                        if split == "train":
+                            raise ValueError(
+                                f"No cache available for concat child {flat_key!r} in {split} split"
+                            )
+                        continue
+                    child_datasets[child_name] = dataset_for_component(
+                        child,
+                        Pos,
+                        child_cache,
+                        eos_id=self.the_tokenizer.eos_token_id,
+                        block_cross_document_attention=self.block_cross_document_attention,
+                    )
+                if not child_datasets:
+                    if split == "train":
+                        raise ValueError(
+                            f"ConcatDatasetComponent {name!r} has no usable children in {split} split"
+                        )
+                    continue
+                datasets[name] = ConcatDataset(child_datasets)
                 continue
 
             if not isinstance(component, DatasetComponent):
@@ -858,6 +936,14 @@ class LmDataConfig:
             if split == "train" and not self._has_nonzero_weight(name):
                 continue
             if isinstance(component, DirectDatasetComponent):
+                continue
+            if isinstance(component, ConcatDatasetComponent):
+                # Flatten concat-component children into the work list with
+                # `<name>/<child_name>` keys; downstream loaders and
+                # `build_token_datasets` discover them under the same prefix.
+                # The concat-component itself has no cache; only its children do.
+                for child_name, child in component.children.items():
+                    items.append((f"{name}/{child_name}", child))
                 continue
             if not isinstance(component, DatasetComponent):
                 raise ValueError(f"Unsupported component type for {name}: {type(component)}")
