@@ -144,3 +144,49 @@ async def test_async_stop_event(max_capacity):
     with pytest.raises(StopIteration):
         next(iter1)
         next(iter1)
+
+
+def test_jax_mesh_propagation_set_mesh_api():
+    """Regression test for the eval-time `Received incompatible devices` crash.
+
+    `jax.set_mesh` (used by Haliax on JAX 0.5+) stores its state in
+    `jax._src.config.{abstract_mesh_context_manager, device_context}` —
+    thread-local config values that `threading.Thread` does NOT propagate.
+    A BackgroundIterable created under a `jax.set_mesh(mesh)` parent must
+    surface that same mesh in the prefetch thread, or downstream jits
+    (e.g. `stack_tree` in the data loader) trace under an empty/CPU mesh
+    and crash when the result meets device-resident data.
+
+    Before the fix, the producer thread saw `get_concrete_mesh() ==
+    empty_concrete_mesh` even though the parent had set a real mesh.
+    """
+    jax = pytest.importorskip("jax")
+    if not hasattr(jax, "set_mesh"):
+        pytest.skip("requires JAX with `jax.set_mesh` (0.5+)")
+    from jax._src.mesh import get_abstract_mesh, get_concrete_mesh
+
+    devices = jax.devices()
+    if len(devices) < 1:
+        pytest.skip("no devices available")
+    mesh = jax.make_mesh((len(devices),), ("dp",))
+
+    captured = {}
+
+    def producer():
+        captured["abstract"] = get_abstract_mesh()
+        captured["concrete"] = get_concrete_mesh()
+        yield 1
+
+    with jax.set_mesh(mesh):
+        parent_abstract = get_abstract_mesh()
+        parent_concrete = get_concrete_mesh()
+        list(BackgroundIterable(producer, max_capacity=10))
+
+    assert captured["abstract"] == parent_abstract, (
+        f"prefetch thread saw abstract={captured['abstract']!r}, "
+        f"expected parent's {parent_abstract!r}"
+    )
+    assert captured["concrete"] == parent_concrete, (
+        f"prefetch thread saw concrete={captured['concrete']!r}, "
+        f"expected parent's {parent_concrete!r}"
+    )
