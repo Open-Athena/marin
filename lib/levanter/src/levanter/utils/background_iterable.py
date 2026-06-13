@@ -49,19 +49,24 @@ class BackgroundIterator(Iterator[Ex]):
         else:
             self._producer_fn = producer_fn
         self._stop_event = threading.Event()
-        # Capture the parent thread's ContextVars + JAX mesh stack so the
+        # Capture the parent thread's ContextVars + JAX mesh state so the
         # prefetch thread runs under the same JAX mesh / sharding context.
-        # threading.Thread does NOT propagate either by default; without
-        # this, jits traced inside _fill_queue_with_batches see an empty
-        # mesh and fall back to CPU, causing "Received incompatible devices"
-        # when the resulting array meets TPU-resident data downstream.
+        # threading.Thread does NOT propagate any of these by default;
+        # without this, jits traced inside _fill_queue_with_batches see no
+        # active mesh and fall back to CPU, causing "Received incompatible
+        # devices" when the resulting array meets TPU-resident data
+        # downstream.
         #
-        # JAX stores its active-mesh stack in a `threading.local` subclass
-        # (`jax._src.mesh.thread_resources`), NOT a ContextVar — so
-        # `copy_context()` alone is insufficient. Snapshot the mesh stack
-        # manually here and restore it inside the prefetch thread.
-        # See tomat specs/done/31-tz11-postmortem.md for the full debugging
-        # story.
+        # JAX stores active-mesh state in TWO independent thread-locals
+        # depending on which API was used to enter the mesh:
+        #   (1) `jax._src.mesh.thread_resources.stack` — the legacy
+        #       `with Mesh(...):` API path (pre-`jax.set_mesh`).
+        #   (2) `jax._src.config.{abstract_mesh_context_manager,
+        #       device_context}` — the `jax.set_mesh()` path, which is
+        #       what Haliax `set_mesh()` / `mesh_context()` selects on
+        #       JAX >= 0.5 (see `haliax/partitioning.py:mesh_context`).
+        # We snapshot BOTH so the fix covers both the old and new mesh
+        # APIs across the JAX versions Levanter supports.
         self._captured_ctx = contextvars.copy_context()
         try:
             from jax._src.mesh import thread_resources as _jax_thread_resources
@@ -70,6 +75,13 @@ class BackgroundIterator(Iterator[Ex]):
         except Exception:
             self._captured_jax_mesh_stack = None
             self._captured_jax_mesh_env = None
+        try:
+            from jax._src import config as _jax_config
+            self._captured_jax_abstract_mesh = _jax_config.abstract_mesh_context_manager.value
+            self._captured_jax_concrete_mesh = _jax_config.device_context.value
+        except Exception:
+            self._captured_jax_abstract_mesh = None
+            self._captured_jax_concrete_mesh = None
 
         if self.max_capacity is None or self.max_capacity >= 0:
             self.q: queue.Queue = queue.Queue(self.max_capacity or 0)
@@ -118,25 +130,35 @@ class BackgroundIterator(Iterator[Ex]):
             self.thread.join()
 
     def _fill_queue_with_batches(self):
-        # Restore JAX's thread-local mesh stack in this producer thread,
-        # since `threading.Thread` doesn't carry it across. This is the
-        # actual fix for the eval-mesh ValueError; `copy_context` below
-        # is belt-and-suspenders for any non-mesh ContextVars.
-        mesh_stack = getattr(self, "_captured_jax_mesh_stack", None)
-        mesh_env = getattr(self, "_captured_jax_mesh_env", None)
-        if mesh_stack is not None:
+        # Restore JAX mesh state captured from the parent thread. We set
+        # both APIs' thread-local state directly (rather than entering a
+        # `jax.set_mesh(...)` context) because the producer thread is a
+        # daemon that lives for the iterator's lifetime — we want the
+        # mesh to stick for the whole producer, and the thread is reaped
+        # at process end so no exit-cleanup is needed.
+        if self._captured_jax_mesh_stack is not None:
             try:
                 from jax._src.mesh import thread_resources as _jax_thread_resources
-                _jax_thread_resources.stack = list(mesh_stack)
-                if mesh_env is not None:
-                    _jax_thread_resources.env = mesh_env
+                _jax_thread_resources.stack = list(self._captured_jax_mesh_stack)
+                if self._captured_jax_mesh_env is not None:
+                    _jax_thread_resources.env = self._captured_jax_mesh_env
             except Exception:
                 pass
-        ctx = getattr(self, "_captured_ctx", None)
-        if ctx is None:
-            self._fill_queue_with_batches_inner()
-        else:
-            ctx.run(self._fill_queue_with_batches_inner)
+        if (
+            self._captured_jax_abstract_mesh is not None
+            or self._captured_jax_concrete_mesh is not None
+        ):
+            try:
+                from jax._src import config as _jax_config
+                if self._captured_jax_abstract_mesh is not None:
+                    _jax_config.abstract_mesh_context_manager.set_local(
+                        self._captured_jax_abstract_mesh
+                    )
+                if self._captured_jax_concrete_mesh is not None:
+                    _jax_config.device_context.set_local(self._captured_jax_concrete_mesh)
+            except Exception:
+                pass
+        self._captured_ctx.run(self._fill_queue_with_batches_inner)
 
     def _fill_queue_with_batches_inner(self):
         try:
