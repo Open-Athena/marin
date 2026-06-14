@@ -1,6 +1,6 @@
 # Levanter in-train eval crash: `stack_tree` jit-cache CPU↔TPU mesh mismatch
 
-**Status**: spec / proposal — multi-host TPU bug, reproducible, fix attempt landed but is incomplete.
+**Status**: Option A implemented (drop `@jax.jit` from `stack_tree`) — `21605b6492` on `rw/levanter-eval-mesh-wrap-fix`. PENDING multi-host TPU verification. See "Update 2026-06-14 (marin session)" below.
 **Filed**: 2026-06-14 from tomat session — see https://wandb.ai/open-athena/tomat-lmq-P19/runs/train-mg-kl-bin5-cos-cont for the most recent live repro.
 **Branch**: `rw/levanter-eval-mesh-wrap-fix` (committed but ineffective on multi-host TPU); see `lib/levanter/src/levanter/eval.py:493-505`.
 
@@ -20,6 +20,36 @@ Crash site: `lib/levanter/src/levanter/data/loader.py:377` — the module-level 
 **The intermittent part is the killer**: in our most recent multi-host bin5 run (`steps_per_eval=22500`, 28 trainer restarts over 67500 steps), evals at step 22500 and 45000 **succeeded**; step 67500 **crashed**. Whether `stack_tree`'s jit-cache locks to a TPU-compatible mesh or a CPU-only mesh depends on which thread happens to trace it first across restarts.
 
 A wrap of `evaluator.evaluate(model)` in `hax.partitioning.set_mesh + hax.axis_mapping` was tried (`b52ab82d` on `rw/levanter-eval-mesh-wrap-fix`) — it deterministically reproduces the workaround used in tomat's `scripts/backfill_vl_modal.py:340-348`. **It works on single-host H200 but does NOT hold on multi-host TPU** — verified live on a fresh v5p-16 cos-cont fire on 2026-06-13 (crashed at step 73500 with the same signature).
+
+## Update 2026-06-14 (marin session)
+
+Implemented **Option A** (drop `@jax.jit` from `stack_tree`, `loader.py`) as
+`21605b6492`. Lint + `lib/levanter/tests/test_new_loader.py` pass. Two findings
+from the marin side that revise this spec:
+
+1. **`jax.set_mesh` is thread-local, not global** (verified on JAX 0.10 here): a
+   concurrent thread holding `set_mesh(meshB)` does NOT change another thread's
+   active mesh. So the "producer's `local_cpu_mesh()` leaks into the consumer
+   thread" sub-theory is **ruled out**. The shared-jit-cache framing is the
+   surviving explanation and is consistent with the code.
+
+2. **This cannot be reproduced or verified off multi-host TPU** — so the
+   "CPU 2-device mesh unit test" proposed below is **not feasible**. I confirmed
+   it: two disjoint CPU meshes cross-calling `stack_tree` *succeed*, because (as
+   noted at the end of "Why the wrap-evaluate fix doesn't help") CPU permits the
+   device transfer the failure depends on. There is no local fail-before /
+   pass-after test. **Only the live tomat v5p repro can verify this fix.**
+
+**Why Option A is still right regardless of the exact mechanism**: removing the
+`@jax.jit` removes the compiled context-mesh binding and the cross-mesh cache
+entirely, so the fan-in `hax.stack`/`jnp.stack` calls dispatch eagerly on each
+input's own devices — nothing to mismatch.
+
+**Caveat for the v5p check**: `stack_tree` runs not only in the background
+producer but also at `loader.py:377` in `_batchify_local_data`, which is
+per-step on the main trainer thread. So glance at MFU on the v5p run, not just
+correctness — the lost fusion is almost certainly negligible (a few stacks per
+batch) but should be confirmed, not assumed.
 
 ## Diagnosis
 
