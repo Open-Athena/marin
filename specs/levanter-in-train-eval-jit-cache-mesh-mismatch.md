@@ -51,6 +51,32 @@ per-step on the main trainer thread. So glance at MFU on the v5p run, not just
 correctness — the lost fusion is almost certainly negligible (a few stacks per
 batch) but should be confirmed, not assumed.
 
+### Rebase onto `m/main` (#6331) — commits dropped
+
+The comprehensive tomat branch (`rw/levanter-eval-mesh-wrap-fix`) was rebased
+onto current `m/main`. Dropped during the rebase:
+
+- The 3 in-flight fixes that **merged upstream** (PRs #6316 flash-None-mask,
+  #6319 cache-fallthrough, #6320 jax_init-idempotent) — now in `m/main`.
+- The **#5594 reverts** (`undo hoist of iris imports` + the test-side revert).
+  Verified unnecessary: in a fresh process `import levanter.distributed` on
+  `m/main` (which fires the module-top `iris.*` + `levanter.megascale` imports)
+  leaves `xla_bridge.backends_are_initialized() == False` — the imports never
+  touch the XLA backend, so they cannot break `jax.distributed.initialize()`.
+  The revert's premise is false (and the test-side revert no longer applied —
+  upstream refactored that test away).
+- The **eval-wrap** (`b52ab82d`, `_evaluate_under_mesh`). It was a workaround
+  for this same jit-cache root cause and is confirmed ineffective on multi-host
+  TPU; the `stack_tree` de-jit fixes the root cause on all platforms (eager
+  dispatch has no cached compilation to mismatch, so it also covers the
+  single-host H200 path the wrap targeted), making the wrap redundant. It also
+  conflicted with upstream's refactored `eval.py`.
+
+Kept: BUILD_DATE stamp, the two open-PR fixes (#6317 BackgroundIterator, #6318
+PassthroughTokenizer), `ConcatDatasetComponent`, `e9ca207` (set_mesh-config
+snapshot), and the `stack_tree` de-jit. Pre-rebase state preserved at
+`backup/eval-mesh-wrap-fix-pre-rebase`.
+
 ## Diagnosis
 
 ### What `stack_tree` does
