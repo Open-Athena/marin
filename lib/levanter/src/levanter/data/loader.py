@@ -553,22 +553,24 @@ class _JaxCpuBackgroundIterator(BackgroundIterator[Ex]):
 
 
 def stack_tree(batch_name, individual_datums):
-    # Deliberately NOT jitted. This runs from two mesh contexts: the data-loader
-    # producer thread under `local_cpu_mesh()` (CPU mesh) and the consumer in
-    # `_batchify_local_data` (main trainer thread) under the device mesh (TPU). A
-    # module-level `@jax.jit` here bakes the active mesh into the cached
-    # compilation; whichever context traces first wins, and the other context's
-    # later call hits that cached compilation with a mismatched context mesh —
-    # on multi-host TPU that raises "Received incompatible devices" at the first
-    # in-training eval boundary (intermittent, since it races on first-touch
-    # across trainer restarts). Eager `hax.stack`/`jnp.stack` dispatch on each
-    # input's own devices, so there is no compiled mesh to mismatch. The fan-in
-    # stacks are cheap enough that the lost fusion is not worth the bug.
+    # Deliberately NOT jitted, and the unnamed-leaf path uses `np.stack` rather
+    # than `jnp.stack`. This runs from the data-loader producer thread under
+    # `local_cpu_mesh()` (CPU mesh) while the leaves themselves may already be
+    # device-placed on the consumer's TPU mesh. Even eager `jnp.stack` goes
+    # through `apply_primitive` and consults the active context mesh for
+    # dispatch, so on multi-host TPU it raises "Received incompatible devices"
+    # at the first in-training eval boundary (CPU singleton context vs TPU
+    # device list) — deterministically killing the producer thread and breaking
+    # the XLA shutdown barrier. `np.stack` avoids JAX primitive dispatch
+    # entirely; the producer is host-side data marshaling, not JAX compute, so
+    # numpy is the right tool. The downstream consumer device-puts the stacked
+    # array onto the TPU mesh; that path is untouched. See marin specs/
+    # levanter-multihost-stack-tree-segfault.md for the full diagnosis.
     def _stack_leaves_unchecked(*leaves):
         if is_named_array(leaves[0]):
             return hax.stack(batch_name, leaves)
         else:
-            return jnp.stack(leaves)
+            return np.stack(leaves)
 
     return jax.tree.map(_stack_leaves_unchecked, *individual_datums, is_leaf=is_named_array)
 
