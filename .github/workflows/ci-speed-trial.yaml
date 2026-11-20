@@ -1,0 +1,149 @@
+name: "CI speed trial"
+
+# Throwaway measurement: xdist worker count and a persistent JAX compilation cache on
+# the levanter and marin unit shards. Phase "cold" runs without a usable cache (one
+# variant writes it); phase "warm" restores the cache written by the same shard.
+
+on:
+  push:
+    branches: [ci-speed-trial]
+
+permissions:
+  contents: read
+
+env:
+  JAX_CACHE_DIR: /home/runner/.cache/jax-cc
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.s.outputs.shards }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: s
+        run: |
+          python3 infra/ci/select_tests.py --run-all-tests > sel.json
+          echo "shards=$(jq -c '[.matrix[] | select(.label|test("^(levanter|marin) "))]' sel.json)" >> "$GITHUB_OUTPUT"
+
+  cold:
+    needs: select
+    name: cold ${{ matrix.variant.name }} (${{ matrix.shard.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.select.outputs.shards) }}
+        variant:
+          - { name: w2, workers: auto, cache: "off" }
+          - { name: w4, workers: logical, cache: "off" }
+          - { name: w4-cache-write, workers: logical, cache: write }
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps: &steps
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - id: meta
+        run: |
+          cpu_model=$(grep -m1 '^model name' /proc/cpuinfo | sed 's/.*: //')
+          cpu_hash=$( (echo "$cpu_model"; grep -m1 '^flags' /proc/cpuinfo) | sha256sum | cut -c1-12)
+          safe=$(echo "${{ matrix.shard.label }}" | tr ' /' '__')
+          echo "cpu_model=$cpu_model" >> "$GITHUB_OUTPUT"
+          echo "cpu_hash=$cpu_hash" >> "$GITHUB_OUTPUT"
+          echo "safe=$safe" >> "$GITHUB_OUTPUT"
+          echo "key=jaxcc-trial-${{ github.run_id }}-$safe-$cpu_hash" >> "$GITHUB_OUTPUT"
+          echo "CPU: $cpu_model ($cpu_hash), nproc=$(nproc)"; free -m
+
+      - id: restore
+        if: startsWith(matrix.variant.cache, 'read')
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ env.JAX_CACHE_DIR }}
+          key: ${{ steps.meta.outputs.key }}
+
+      - name: Install
+        run: |
+          start=$(date +%s%N)
+          uv run --python ${{ matrix.shard.python }} --package ${{ matrix.shard.package }} \
+            ${{ matrix.shard.extras }} --group test python -c pass
+          echo "INSTALL_SECONDS=$(( ($(date +%s%N) - start) / 1000000 ))e-3" >> "$GITHUB_ENV"
+
+      - name: Test
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          WORKERS: ${{ matrix.variant.workers }}
+          CACHE_MODE: ${{ matrix.variant.cache }}
+        run: |
+          if [ "$CACHE_MODE" != "off" ]; then
+            mkdir -p "$JAX_CACHE_DIR"
+            export JAX_COMPILATION_CACHE_DIR="$JAX_CACHE_DIR"
+            export JAX_PERSISTENT_CACHE_MIN_COMPILE_TIME_SECS=0
+            export JAX_PERSISTENT_CACHE_MIN_ENTRY_SIZE_BYTES=-1
+          fi
+          entries_before=$(find "$JAX_CACHE_DIR" -type f 2>/dev/null | wc -l)
+          ( while sleep 1; do free -m | awk '/^Mem:/{m=$3; a=$7} /^Swap:/{s=$3} END{print m, a, s}'; done ) > "$RUNNER_TEMP/mem.log" &
+          sampler=$!
+          args="${{ matrix.shard.pytest_args }}"
+          args="${args/-n auto/-n $WORKERS}"
+          start=$(date +%s%N)
+          status=0
+          uv run --python ${{ matrix.shard.python }} --package ${{ matrix.shard.package }} \
+            ${{ matrix.shard.extras }} --group test \
+            pytest $args --junitxml="$RUNNER_TEMP/junit.xml" \
+            ${{ matrix.shard.test_paths }} 2>&1 | tee "$RUNNER_TEMP/pytest.log" || true
+          status=${PIPESTATUS[0]}
+          wall=$(( ($(date +%s%N) - start) / 1000000 ))e-3
+          kill $sampler || true
+          summary=$(grep -E '^=+ .*(passed|failed|error).* in [0-9.]+s' "$RUNNER_TEMP/pytest.log" | tail -1 || true)
+          oom=$(sudo dmesg | grep -ciE 'out of memory|killed process' || true)
+          entries_after=$(find "$JAX_CACHE_DIR" -type f 2>/dev/null | wc -l)
+          cache_mb=$(du -sm "$JAX_CACHE_DIR" 2>/dev/null | cut -f1)
+          jq -n \
+            --arg variant "${{ matrix.variant.name }}" --arg phase "${{ github.job }}" \
+            --arg shard "${{ matrix.shard.label }}" --arg cpu "${{ steps.meta.outputs.cpu_model }}" \
+            --arg cpu_hash "${{ steps.meta.outputs.cpu_hash }}" \
+            --arg cache_hit "${{ steps.restore.outputs.cache-hit }}" \
+            --arg summary "$summary" --argjson status "$status" --argjson wall "$wall" \
+            --argjson install "$INSTALL_SECONDS" \
+            --argjson entries_before "$entries_before" --argjson entries_after "$entries_after" \
+            --argjson cache_mb "${cache_mb:-0}" --argjson oom "$oom" \
+            --argjson peak_used_mb "$(awk 'BEGIN{m=0} {if ($1>m) m=$1} END{print m}' "$RUNNER_TEMP/mem.log")" \
+            --argjson min_avail_mb "$(awk 'BEGIN{m=1e9} {if ($2<m) m=$2} END{print m}' "$RUNNER_TEMP/mem.log")" \
+            --argjson peak_swap_mb "$(awk 'BEGIN{m=0} {if ($3>m) m=$3} END{print m}' "$RUNNER_TEMP/mem.log")" \
+            --arg attempt "${{ github.run_attempt }}" \
+            '$ARGS.named' | tee "$RUNNER_TEMP/result.json"
+
+      - if: always() && matrix.variant.cache == 'write'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ env.JAX_CACHE_DIR }}
+          key: ${{ steps.meta.outputs.key }}
+
+      - if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trial-${{ github.job }}-${{ matrix.variant.name }}-${{ steps.meta.outputs.safe }}-a${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/result.json
+            ${{ runner.temp }}/junit.xml
+            ${{ runner.temp }}/mem.log
+          retention-days: 14
+
+  warm:
+    needs: [select, cold]
+    if: always() && needs.select.result == 'success'
+    name: warm ${{ matrix.variant.name }} (${{ matrix.shard.label }})
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.select.outputs.shards) }}
+        variant:
+          - { name: w2-cache-read, workers: auto, cache: read }
+          - { name: w4-cache-read, workers: logical, cache: read }
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps: *steps
