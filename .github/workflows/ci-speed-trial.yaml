@@ -47,7 +47,7 @@ jobs:
           python-version: "3.12"
           enable-cache: true
       - id: meta
-        run: &meta |
+        run: |
           cpu_model=$(grep -m1 '^model name' /proc/cpuinfo | sed 's/.*: //')
           cpu_hash=$( (echo "$cpu_model"; grep -m1 '^flags' /proc/cpuinfo) | sha256sum | cut -c1-12)
           safe=$(jq -r .label <<<"$SHARD_JSON" | tr ' /' '__')
@@ -59,20 +59,18 @@ jobs:
           echo "safe=$safe" >> "$GITHUB_OUTPUT"
           echo "CPU: $cpu_model ($cpu_hash), nproc=$(nproc)"; free -m
       - name: Install and warm imports
-        run: &warm |
+        run: |
           python=$(jq -r .python <<<"$SHARD_JSON"); package=$(jq -r .package <<<"$SHARD_JSON")
           extras=$(jq -r .extras <<<"$SHARD_JSON"); paths=$(jq -r .test_paths <<<"$SHARD_JSON")
           # shellcheck disable=SC2086
           uv run --python "$python" --package "$package" $extras --group test \
             pytest --collect-only -q -n 0 $paths > /dev/null 2>&1 || true
-      - name: "Run A: 2 workers, no cache"
-        run: bash .github/ci-trial/run.sh A-w2 auto off none
       - name: "Run B: 4 workers, no cache"
         run: bash .github/ci-trial/run.sh B-w4 logical off none
-      - name: "Run C: 4 workers, AVX2 cap, empty cache"
-        run: bash .github/ci-trial/run.sh C-w4-avx2-cold logical on AVX2
-      - name: "Run D: 4 workers, AVX2 cap, warm cache from C"
-        run: bash .github/ci-trial/run.sh D-w4-avx2-warm logical on AVX2
+      - name: "Run C: 4 workers, empty cache, no ISA cap"
+        run: bash .github/ci-trial/run.sh C-w4-cold logical on none
+      - name: "Run D: 4 workers, warm cache from C, no ISA cap"
+        run: bash .github/ci-trial/run.sh D-w4-warm logical on none
       - name: "Run B2: 4 workers, no cache (repeat)"
         run: bash .github/ci-trial/run.sh B2-w4 logical off none
       - if: always()
@@ -84,45 +82,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: paired-${{ steps.meta.outputs.safe }}
-          path: ${{ runner.temp }}/results.jsonl
-          retention-days: 14
-
-  cross:
-    needs: [select, paired]
-    if: always() && needs.select.result == 'success'
-    name: cross (${{ matrix.shard.label }})
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(needs.select.outputs.shards) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    env:
-      PHASE: cross
-      SHARD_JSON: ${{ toJSON(matrix.shard) }}
-      HF_TOKEN: ${{ secrets.HF_TOKEN }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v7
-        with:
-          python-version: "3.12"
-          enable-cache: true
-      - id: meta
-        run: *meta
-      - id: restore
-        uses: actions/cache/restore@v6
-        with:
-          path: ${{ env.CACHE_DIR }}
-          key: jaxcc-trial2-${{ github.run_id }}-${{ steps.meta.outputs.safe }}
-      - name: Install and warm imports
-        run: *warm
-      - name: "Run E: 4 workers, AVX2 cap, cache restored from another runner"
-        env:
-          CACHE_HIT: ${{ steps.restore.outputs.cache-hit }}
-        run: bash .github/ci-trial/run.sh E-w4-avx2-restored logical on AVX2
-      - if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: cross-${{ steps.meta.outputs.safe }}
           path: ${{ runner.temp }}/results.jsonl
           retention-days: 14
