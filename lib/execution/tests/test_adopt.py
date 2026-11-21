@@ -10,6 +10,7 @@ nothing is recomputed — while a provenance record at the canonical address rec
 import logging
 
 import pytest
+
 from marin.execution.artifact import Artifact, read_record
 from marin.execution.lazy import ArtifactStep, materialized_config, run
 

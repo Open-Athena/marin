@@ -23,9 +23,10 @@ from levanter.main.export_lm_to_hf import ConvertLmConfig
 from levanter.models.lm_model import LmConfig
 from levanter.trainer import TrainerConfig
 
+from marin.execution.resource_extras import extras_for_resources
 from marin.inference.generation_config import MARIN_GENERATION_CONFIG_DEFAULTS
 from marin.training.levanter import _add_default_env_variables
-from marin.training.run_environment import add_run_env_variables, extras_for_resources
+from marin.training.run_environment import add_run_env_variables
 
 logger = logging.getLogger(__name__)
 

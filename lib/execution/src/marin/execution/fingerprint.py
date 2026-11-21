@@ -26,16 +26,16 @@ import inspect
 import json
 import logging
 import os
+import sys
 from collections.abc import Callable
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
-import jax
 import numpy as np
 
-from marin.utilities.json_encoder import scalar_dtype
+from marin.execution.json_encoder import scalar_dtype
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +47,16 @@ _SEEN_UNFINGERPRINTABLE: set[str] = set()
 
 # None defers to the env var; True/False is an explicit override set via set_strict.
 _STRICT_OVERRIDE: bool | None = None
+
+
+def _is_jax_array(o: object) -> bool:
+    """Whether ``o`` is a ``jax.Array``, without importing jax.
+
+    jax is not a dependency of this package. A value can only be a ``jax.Array`` if its
+    creator already imported jax, so an absent module means the answer is no.
+    """
+    jax = sys.modules.get("jax")
+    return jax is not None and isinstance(o, jax.Array)
 
 
 def register_fingerprint(tp: type, encode: Callable[[Any], object]) -> None:
@@ -112,7 +122,7 @@ class _FingerprintEncoder(json.JSONEncoder):
             return {"__dtype__": o.name}
         if isinstance(o, np.generic):
             return o.item()
-        if isinstance(o, np.ndarray | jax.Array):
+        if isinstance(o, np.ndarray) or _is_jax_array(o):
             arr = np.asarray(o)
             return {"__array__": arr.tolist(), "dtype": arr.dtype.name, "shape": list(arr.shape)}
         if isinstance(o, type):

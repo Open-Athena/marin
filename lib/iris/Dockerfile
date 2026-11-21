@@ -167,6 +167,7 @@ COPY lib/finelog/pyproject.toml ./lib/finelog/pyproject.toml
 COPY lib/fray/pyproject.toml ./lib/fray/pyproject.toml
 COPY lib/haliax/pyproject.toml ./lib/haliax/pyproject.toml
 COPY lib/levanter/pyproject.toml ./lib/levanter/pyproject.toml
+COPY lib/execution/pyproject.toml ./lib/execution/pyproject.toml
 COPY lib/marin/pyproject.toml ./lib/marin/pyproject.toml
 COPY lib/zephyr/pyproject.toml ./lib/zephyr/pyproject.toml
 RUN --mount=type=cache,target=/root/.cache/uv \

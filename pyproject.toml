@@ -271,6 +271,7 @@ conflicts = [
 members = [
     "lib/iris",
     "lib/fray",
+    "lib/execution",
     "lib/finelog",
     "lib/dupekit",
     "lib/ducky",
@@ -315,6 +316,7 @@ marin-marina = { workspace = true }
 marin-haliax = { workspace = true }
 marin-levanter = { workspace = true }
 marin-core = { workspace = true }
+marin-execution = { workspace = true }
 marin-rigging = { workspace = true }
 marin-rolloutengine = { workspace = true }
 marin-shellbox = { workspace = true }
@@ -388,6 +390,11 @@ target-version = "py312"
 # and stay under ruff.
 extend-exclude = ["scripts/", "vendor/skyrl/", "vendor/harbor/"]
 extend-include = ["scripts/ci/**/*.py", "scripts/cost_manager/**/*.py"]
+# `marin` is a namespace package split across marin-core and marin-execution (neither ships
+# marin/__init__.py). Without this, ruff takes `marin/` itself as a package root and sorts
+# `marin/<sub>` imports as top-level first-party modules. Repo-root-relative, so it resolves the
+# same whether ruff discovers a lib config or is passed one via --config from the root.
+namespace-packages = ["lib/marin/src/marin", "lib/execution/src/marin"]
 
 [tool.ruff.lint]
 # A,B,E,F,I,NPY,RUF,UP,W are the established families. The individually-listed
@@ -451,6 +458,7 @@ disable-project-excludes-heuristics = true
 
 project-includes = [
     "lib/marin/src/**/*.py",
+    "lib/execution/src/**/*.py",
     "lib/levanter/src/**/*.py",
     "lib/haliax/src/**/*.py",
     "lib/fray/src/**/*.py",
@@ -476,6 +484,7 @@ project-includes = [
 # contains a handful of legacy modules.
 search-path = [
     "lib/marin/src",
+    "lib/execution/src",
     "lib/levanter/src",
     "lib/haliax/src",
     "lib/rigging/src",

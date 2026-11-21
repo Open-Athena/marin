@@ -13,6 +13,8 @@ import json
 import logging
 
 import pytest
+from pydantic import BaseModel
+
 from marin.execution.artifact import (
     Artifact,
     FingerprintMismatchError,
@@ -24,7 +26,6 @@ from marin.execution.artifact import (
 )
 from marin.execution.lazy import ArtifactStep, lower, run
 from marin.execution.step_runner import StepRunner
-from pydantic import BaseModel
 
 # A frozen calendar version for the toy artifacts these tests build.
 V = "2026.06.28"

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 import pytest
 from fray.current_client import current_client, set_current_client
 from fray.types import ResourceConfig
+
 from marin.execution.artifact import Artifact, ArtifactTypeMismatchError, read_record
 from marin.execution.lazy import OUT, ArtifactStep, StepContext, apply, lower, materialized_config, resolve, run
 from marin.execution.remote import remote

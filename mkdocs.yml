@@ -56,6 +56,7 @@ extra:
 watch:
   - docs/
   - lib/marin/src/
+  - lib/execution/src/
 
 hooks:
   - infra/mkdocs_hooks.py
@@ -172,7 +173,7 @@ plugins:
       default_handler: python
       handlers:
         python:
-          paths: [".", "lib/marin/src"]
+          paths: [".", "lib/marin/src", "lib/execution/src"]
           inventories:
             - https://docs.python.org/3/objects.inv
             - https://jax.readthedocs.io/en/latest/objects.inv

@@ -110,6 +110,7 @@ PACKAGES: Mapping[str, PackageFamily] = MappingProxyType(
         PYTHON_LIBS_FAMILY: PackageFamily(
             declared_version_paths=(
                 Path("lib/marin/pyproject.toml"),
+                Path("lib/execution/pyproject.toml"),
                 Path("lib/iris/pyproject.toml"),
                 Path("lib/fray/pyproject.toml"),
                 Path("lib/rigging/pyproject.toml"),
@@ -128,6 +129,7 @@ PACKAGES: Mapping[str, PackageFamily] = MappingProxyType(
                     distribution: ArtifactExpectation(wheels=1, sdists=1, pure_python=True)
                     for distribution in (
                         "marin-core",
+                        "marin-execution",
                         "marin-iris",
                         "marin-fray",
                         "marin-rigging",

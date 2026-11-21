@@ -40,11 +40,11 @@ from marin.execution.artifact import (
     is_mutable_version,
     write_step_record,
 )
+from marin.execution.json_encoder import CustomJsonEncoder
 from marin.execution.remote import RemoteCallable, sanitize_job_name
+from marin.execution.resource_extras import dependency_groups_for_resources
 from marin.execution.step_spec import StepSpec
 from marin.execution.step_status import PreviousTaskFailedError, StatusFile, StepAlreadyDone, step_lock, worker_id
-from marin.training.run_environment import dependency_groups_for_resources
-from marin.utilities.json_encoder import CustomJsonEncoder
 
 logger = logging.getLogger(__name__)
 

@@ -40,6 +40,7 @@ SCOPES: tuple[str, ...] = (
     "levanter",
     "zephyr",
     "marin",
+    "execution",
     "dupekit",
     "finelog",
     "finestore",
@@ -66,7 +67,13 @@ EXPERIMENTS_DIR = "experiments"
 EXPERIMENT_README = "README.md"
 
 SOURCE_ROOTS: tuple[SourceRoot, ...] = (
-    *(SourceRoot(f"lib/{scope}/src/{scope}", f"lib/{scope}/src") for scope in SCOPES if scope not in {"deploy", "iac"}),
+    *(
+        SourceRoot(f"lib/{scope}/src/{scope}", f"lib/{scope}/src")
+        for scope in SCOPES
+        if scope not in {"deploy", "iac", "execution"}
+    ),
+    # marin-execution ships `marin/execution/` into the `marin` namespace package.
+    SourceRoot("lib/execution/src/marin/execution", "lib/execution/src"),
     SourceRoot("lib/rolloutengine/src/rolloutengine", "lib/rolloutengine/src"),
     SourceRoot("lib/shellbox/src/shellbox", "lib/shellbox/src"),
     SourceRoot("lib/taskcompendium/src/taskcompendium", "lib/taskcompendium/src"),
@@ -113,6 +120,7 @@ UV_PACKAGE: dict[str, str] = {
     "levanter": "marin-levanter",
     "zephyr": "marin-zephyr",
     "marin": "marin-core",
+    "execution": "marin-execution",
     "dupekit": "marin-dupekit",
     "finelog": "marin-finelog",
     "finestore": "marin-finestore",
@@ -204,7 +212,7 @@ EXTRA_SUITE_TRIGGERS: dict[str, tuple[str, ...]] = {
         "infra/marina/",
         "lib/finestore/src/finestore/rl/",
         "lib/marin/src/marin/rl/",
-        "lib/marin/src/marin/execution/",
+        "lib/execution/",
         "experiments/post_training/rl",
         "experiments/post_training/snowball_rl.py",
         "experiments/post_training/skyrl_test_support.py",

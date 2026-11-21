@@ -226,6 +226,7 @@ members = [
     "marin-ducky",
     "marin-dupekit",
     "marin-evalrecords",
+    "marin-execution",
     "marin-finelog",
     "marin-finestore",
     "marin-fray",
@@ -4599,6 +4600,7 @@ dependencies = [
     { name = "jax", version = "0.12.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-10-marin-core-rocm' or extra == 'extra-14-marin-levanter-rocm' or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-10-marin-core-gpu') or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-10-marin-root-pipeline') or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-14-marin-levanter-gpu') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-10-marin-core-tpu') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-10-marin-root-pipeline') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-10-marin-core-gpu' and extra == 'group-10-marin-fray-fray-tpu-test') or (extra == 'extra-10-marin-core-tpu' and extra == 'extra-10-marin-root-pipeline') or (extra == 'extra-10-marin-core-tpu' and extra == 'extra-14-marin-levanter-gpu') or (extra == 'extra-10-marin-root-pipeline' and extra == 'extra-14-marin-levanter-gpu') or (extra == 'extra-10-marin-root-pipeline' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-10-marin-root-pipeline' and extra == 'group-10-marin-fray-fray-tpu-test') or (extra == 'extra-10-marin-root-pipeline' and extra == 'group-10-marin-iris-dev') or (extra == 'extra-10-marin-root-pipeline' and extra == 'group-10-marin-iris-test') or (extra == 'extra-14-marin-levanter-gpu' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-14-marin-levanter-gpu' and extra == 'group-10-marin-fray-fray-tpu-test')" },
     { name = "jaxopt" },
     { name = "marin-evalrecords" },
+    { name = "marin-execution" },
     { name = "marin-finestore" },
     { name = "marin-fray" },
     { name = "marin-haliax" },
@@ -4772,6 +4774,7 @@ requires-dist = [
     { name = "luxical", marker = "extra == 'datakit'" },
     { name = "marin-dupekit", marker = "extra == 'dedup'", editable = "lib/dupekit" },
     { name = "marin-evalrecords", editable = "lib/evalrecords" },
+    { name = "marin-execution", editable = "lib/execution" },
     { name = "marin-finestore", editable = "lib/finestore" },
     { name = "marin-fray", editable = "lib/fray" },
     { name = "marin-haliax", editable = "lib/haliax" },
@@ -5052,6 +5055,45 @@ requires-dist = [
 [package.metadata.requires-dev]
 test = [
     { name = "pytest", specifier = ">=8.4" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+]
+
+[[package]]
+name = "marin-execution"
+version = "0.2.0"
+source = { editable = "lib/execution" }
+dependencies = [
+    { name = "marin-fray" },
+    { name = "marin-iris" },
+    { name = "marin-rigging" },
+    { name = "numpy" },
+    { name = "pydantic" },
+]
+
+[package.dev-dependencies]
+test = [
+    { name = "jax", version = "0.11.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-10-marin-root-pipeline' or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-10-marin-core-gpu') or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-10-marin-core-rocm') or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-14-marin-levanter-gpu') or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-14-marin-levanter-rocm') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-10-marin-core-rocm') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-10-marin-core-tpu') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-14-marin-levanter-rocm') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-10-marin-core-gpu' and extra == 'group-10-marin-fray-fray-tpu-test') or (extra == 'extra-10-marin-core-rocm' and extra == 'extra-10-marin-core-tpu') or (extra == 'extra-10-marin-core-rocm' and extra == 'extra-14-marin-levanter-gpu') or (extra == 'extra-10-marin-core-rocm' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-10-marin-core-rocm' and extra == 'group-10-marin-fray-fray-tpu-test') or (extra == 'extra-10-marin-core-rocm' and extra == 'group-10-marin-iris-dev') or (extra == 'extra-10-marin-core-rocm' and extra == 'group-10-marin-iris-test') or (extra == 'extra-10-marin-core-tpu' and extra == 'extra-14-marin-levanter-gpu') or (extra == 'extra-10-marin-core-tpu' and extra == 'extra-14-marin-levanter-rocm') or (extra == 'extra-14-marin-levanter-gpu' and extra == 'extra-14-marin-levanter-rocm') or (extra == 'extra-14-marin-levanter-gpu' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-14-marin-levanter-gpu' and extra == 'group-10-marin-fray-fray-tpu-test') or (extra == 'extra-14-marin-levanter-rocm' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-14-marin-levanter-rocm' and extra == 'group-10-marin-fray-fray-tpu-test') or (extra == 'extra-14-marin-levanter-rocm' and extra == 'group-10-marin-iris-dev') or (extra == 'extra-14-marin-levanter-rocm' and extra == 'group-10-marin-iris-test')" },
+    { name = "jax", version = "0.11.1", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-10-marin-core-cpu' or extra == 'extra-10-marin-core-gpu' or extra == 'extra-10-marin-core-tpu' or extra == 'extra-14-marin-levanter-gpu' or extra == 'extra-14-marin-levanter-tpu' or extra == 'group-10-marin-fray-fray-tpu-test' or extra == 'group-10-marin-iris-dev' or extra == 'group-10-marin-iris-test' or (extra == 'extra-10-marin-core-rocm' and extra == 'extra-10-marin-root-pipeline') or (extra == 'extra-10-marin-root-pipeline' and extra == 'extra-14-marin-levanter-rocm') or (extra != 'extra-10-marin-core-rocm' and extra != 'extra-10-marin-root-pipeline' and extra != 'extra-14-marin-levanter-rocm')" },
+    { name = "jax", version = "0.12.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-10-marin-core-rocm' or extra == 'extra-14-marin-levanter-rocm' or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-10-marin-core-gpu') or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-10-marin-root-pipeline') or (extra == 'extra-10-marin-core-cpu' and extra == 'extra-14-marin-levanter-gpu') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-10-marin-core-tpu') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-10-marin-root-pipeline') or (extra == 'extra-10-marin-core-gpu' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-10-marin-core-gpu' and extra == 'group-10-marin-fray-fray-tpu-test') or (extra == 'extra-10-marin-core-tpu' and extra == 'extra-10-marin-root-pipeline') or (extra == 'extra-10-marin-core-tpu' and extra == 'extra-14-marin-levanter-gpu') or (extra == 'extra-10-marin-root-pipeline' and extra == 'extra-14-marin-levanter-gpu') or (extra == 'extra-10-marin-root-pipeline' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-10-marin-root-pipeline' and extra == 'group-10-marin-fray-fray-tpu-test') or (extra == 'extra-10-marin-root-pipeline' and extra == 'group-10-marin-iris-dev') or (extra == 'extra-10-marin-root-pipeline' and extra == 'group-10-marin-iris-test') or (extra == 'extra-14-marin-levanter-gpu' and extra == 'extra-14-marin-levanter-tpu') or (extra == 'extra-14-marin-levanter-gpu' and extra == 'group-10-marin-fray-fray-tpu-test')" },
+    { name = "pytest" },
+    { name = "pytest-timeout" },
+    { name = "pytest-xdist" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "marin-fray", editable = "lib/fray" },
+    { name = "marin-iris", editable = "lib/iris" },
+    { name = "marin-rigging", editable = "lib/rigging" },
+    { name = "numpy" },
+    { name = "pydantic", specifier = ">=2.0" },
+]
+
+[package.metadata.requires-dev]
+test = [
+    { name = "jax", specifier = ">=0.9.2,<0.13" },
+    { name = "pytest", specifier = ">=8.3.2" },
     { name = "pytest-timeout" },
     { name = "pytest-xdist" },
 ]

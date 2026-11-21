@@ -18,6 +18,7 @@
 !lib/fray/pyproject.toml
 !lib/haliax/pyproject.toml
 !lib/levanter/pyproject.toml
+!lib/execution/pyproject.toml
 !lib/marin/pyproject.toml
 !lib/zephyr/pyproject.toml
 

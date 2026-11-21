@@ -7,10 +7,13 @@ import os
 from pathlib import Path
 from threading import Event
 
-import marin.execution.step_runner as step_runner_module
 import pytest
 from fray.current_client import current_client, set_current_client
 from fray.types import ResourceConfig
+from pydantic import BaseModel
+from rigging.filesystem.step_status import STATUS_SUCCESS
+
+import marin.execution.step_runner as step_runner_module
 from marin.execution.artifact import (
     FINGERPRINT_KEY,
     VERSION_KEY,
@@ -23,8 +26,6 @@ from marin.execution.remote import RemoteCallable, remote
 from marin.execution.step_runner import StepRunner
 from marin.execution.step_spec import StepSpec
 from marin.execution.step_status import StatusFile, worker_id
-from pydantic import BaseModel
-from rigging.filesystem.step_status import STATUS_SUCCESS
 
 # ---------------------------------------------------------------------------
 # Artifact types

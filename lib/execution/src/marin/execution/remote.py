@@ -26,7 +26,7 @@ from fray.current_client import current_client
 from fray.types import Entrypoint, JobRequest, ResourceConfig, create_environment
 from rigging.timing import Duration
 
-from marin.training.run_environment import dependency_groups_for_resources
+from marin.execution.resource_extras import dependency_groups_for_resources
 
 P = ParamSpec("P")
 R = TypeVar("R")
